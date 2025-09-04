@@ -1,0 +1,5 @@
+com\example\colabodraw\whiteboard\AuthController.class
+com\example\colabodraw\whiteboard\HomeController.class
+com\example\colabodraw\whiteboard\SecurityConfig.class
+com\example\colabodraw\whiteboard\UserRegistrationDto.class
+com\example\colabodraw\whiteboard\WhiteboardApplication.class
