@@ -185,7 +185,4 @@ Start command in Render should run the shaded jar; port is provided by `$PORT`.
 
 ---
 
-## License
-MIT
-
 CollaboDraw — collaborate visually in real time.
