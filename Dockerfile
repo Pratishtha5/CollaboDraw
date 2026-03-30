@@ -1,5 +1,5 @@
-# Multi-stage Dockerfile for Spring Boot (Java 17)
-FROM eclipse-temurin:17-jdk AS builder
+# Multi-stage Dockerfile for Spring Boot (Java 21)
+FROM eclipse-temurin:21-jdk AS builder
 WORKDIR /build
 
 # Copy Maven wrapper and project files
@@ -11,11 +11,11 @@ COPY src src
 RUN chmod +x mvnw && ./mvnw -DskipTests package
 
 # Runtime image
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# Copy the generated jar
-COPY --from=builder /build/target/*.jar app.jar
+# Copy the Spring Boot executable jar (not the *.jar.original file)
+COPY --from=builder /build/target/*SNAPSHOT.jar app.jar
 
 # Allow custom JVM options
 ENV JAVA_OPTS=""
