@@ -3,16 +3,6 @@
 CollaboDraw is a real-time collaborative whiteboard built with Spring Boot, STOMP over WebSockets, Thymeleaf, and MySQL.
 Multiple users can draw on the same board, see presence and cursor updates, and collaborate live.
 
-## About
-
-- Purpose: a semester project focused on real-time systems and collaboration UX.
-- Stack: Java 21, Spring Boot 3.5.7, Spring Security, WebSockets (SockJS + STOMP), Thymeleaf, MySQL/H2.
-- Repository status: build and tests verified on 2026-03-30.
-
-Suggested GitHub "About" text:
-
-"Cloud-based real-time collaborative whiteboard using Spring Boot + STOMP/WebSockets with MySQL persistence and Google OAuth2 login."
-
 ## Features
 
 - Real-time board events via STOMP channels (presence, cursor, element, version).
