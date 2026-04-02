@@ -28,6 +28,8 @@ public class MainScreenController {
             @RequestParam(value = "shared", required = false) String sharedBoardId,
             @RequestParam(value = "template", required = false) String templateId,
             @RequestParam(value = "preview", required = false) String previewId,
+            @RequestParam(value = "new", required = false) String newBoard,
+            @RequestParam(value = "name", required = false) String boardName,
             @RequestParam(value = "seedTemplate", required = false) String seedTemplate) {
         
         if (authentication != null && authentication.isAuthenticated()) {
@@ -50,6 +52,12 @@ public class MainScreenController {
         }
         if (previewId != null) {
             model.addAttribute("previewId", previewId);
+        }
+        if (newBoard != null) {
+            model.addAttribute("newBoard", newBoard);
+        }
+        if (boardName != null) {
+            model.addAttribute("boardName", boardName);
         }
         if (seedTemplate != null) {
             model.addAttribute("seedTemplate", seedTemplate);

@@ -17,7 +17,8 @@ let panY = 0;
 let timerRunning = false;
 let timerSeconds = 0;
 let timerInterval;
-let traybarVisible = true;
+let traybarVisible = false;
+let historyRestoring = false;
 let users = [];
 // Realtime state
 let remoteCursors = {}; // { [userId]: { x, y, name, color } }
@@ -68,6 +69,20 @@ function initializeApp() {
   }
   
   console.log('✅ DOM elements loaded');
+
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const isNewBoard = (window.CD && String(window.CD.newBoard).toLowerCase() === '1') || params.get('new') === '1';
+    if (isNewBoard) {
+      localStorage.removeItem('collabodraw-board');
+      localStorage.removeItem('collabodraw-versions');
+      boardData = { name: 'Untitled Board', elements: [], settings: {} };
+      selectedElements = [];
+      undoStack = [];
+      redoStack = [];
+    }
+  } catch (_) {}
+
   // Set canvas size
   resizeCanvas();
   
@@ -83,6 +98,7 @@ function initializeApp() {
   
   // Initialize user interface
   initializeUI();
+  initializeUndoRedo();
   
   // ✅ Load board name from server
   loadBoardName();
@@ -155,6 +171,9 @@ async function ensureStartupBoard() {
   try {
     const qp = new URLSearchParams(window.location.search || '');
     const sessionCode = qp.get('session');
+    const previewId = qp.get('preview');
+    const wantsNewBoard = qp.get('new') === '1' || (window.CD && String(window.CD.newBoard).toLowerCase() === '1');
+    const requestedName = (qp.get('name') || (window.CD && window.CD.boardName) || '').trim();
     let boardId = window.CD && window.CD.boardId ? Number(window.CD.boardId) : null;
 
     // If we already have a numeric board id, verify it exists
@@ -196,6 +215,41 @@ async function ensureStartupBoard() {
         try { const j = await res.json(); if (j && j.message) errText = j.message; } catch{}
         notify(errText + ` (code: ${sessionCode})`);
         console.warn('Failed to resolve session code:', sessionCode);
+      }
+    }
+
+    if (!boardId && !previewId && wantsNewBoard) {
+      const boardName = requestedName || (document.getElementById('boardName')?.value || boardData?.name || 'Untitled Board').trim() || 'Untitled Board';
+      const response = await fetch('/api/boards/create', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `name=${encodeURIComponent(boardName)}`
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.id) {
+          if (!window.CD) window.CD = {};
+          window.CD.boardId = data.id;
+          try {
+            localStorage.setItem('collabodraw-boards-updated', JSON.stringify({
+              action: 'created',
+              boardId: data.id,
+              timestamp: Date.now()
+            }));
+          } catch (_) {}
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('new');
+            url.searchParams.set('board', String(data.id));
+            window.history.replaceState({}, '', url);
+          } catch (_) {}
+          const boardNameInput = document.getElementById('boardName');
+          if (boardNameInput) {
+            boardNameInput.value = data.name || boardName;
+          }
+          return;
+        }
       }
     }
   } catch (e) {
@@ -1353,6 +1407,10 @@ function setupElementInteraction(element) {
     if (currentTool !== 'select') return;
     
     e.stopPropagation();
+    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+      toggleElementSelection(element);
+      return;
+    }
     isDragging = true;
     startX = e.clientX;
     startY = e.clientY;
@@ -1405,6 +1463,21 @@ function setupElementInteraction(element) {
   });
 }
 
+function toggleElementSelection(element) {
+  if (!element) return;
+  const index = selectedElements.indexOf(element);
+  if (index >= 0) {
+    element.classList.remove('selected');
+    selectedElements.splice(index, 1);
+  } else {
+    element.classList.add('selected');
+    selectedElements.push(element);
+  }
+  if (selectedElements.length > 0) {
+    updatePropertiesPanel(selectedElements[selectedElements.length - 1]);
+  }
+}
+
 /**
  * Select a canvas element
  */
@@ -1419,6 +1492,11 @@ function selectElement(element) {
   
   // Update properties panel
   updatePropertiesPanel(element);
+}
+
+function clearSelection() {
+  selectedElements.forEach(el => el.classList.remove('selected'));
+  selectedElements = [];
 }
 
 /**
@@ -1492,7 +1570,42 @@ function handleContextAction(action) {
     case 'send-back':
       sendToBack();
       break;
+    case 'group':
+      groupSelected();
+      break;
+    case 'ungroup':
+      ungroupSelected();
+      break;
   }
+}
+
+function groupSelected() {
+  if (selectedElements.length < 2) {
+    showNotification('Select at least two elements to group');
+    return;
+  }
+
+  const groupId = generateId();
+  selectedElements.forEach((element) => {
+    element.dataset.groupId = groupId;
+    element.classList.add('grouped');
+  });
+  saveState();
+  showNotification('Elements grouped');
+}
+
+function ungroupSelected() {
+  if (selectedElements.length === 0) {
+    showNotification('Select grouped elements to ungroup');
+    return;
+  }
+
+  selectedElements.forEach((element) => {
+    delete element.dataset.groupId;
+    element.classList.remove('grouped');
+  });
+  saveState();
+  showNotification('Elements ungrouped');
 }
 
 /**
@@ -1724,10 +1837,27 @@ function createStateSnapshot() {
         console.warn('⚠️ Canvas container not found');
         return null;
     }
+
+  const boardNameInput = document.getElementById('boardName');
+  const boardDataSnapshot = boardData ? JSON.parse(JSON.stringify(boardData)) : null;
     
     return {
         html: container.innerHTML,
-        boardName: boardData.name,
+    imageData: (() => {
+      try {
+        return canvas ? canvas.toDataURL('image/png') : null;
+      } catch (_) {
+        return null;
+      }
+    })(),
+    boardData: boardDataSnapshot,
+    boardName: boardNameInput ? boardNameInput.value : (boardData?.name || 'Untitled Board'),
+    zoomLevel,
+    panX,
+    panY,
+    timerSeconds,
+    currentTool,
+    currentColor,
         timestamp: Date.now(),
         elementCount: container.querySelectorAll('.canvas-element').length,
         // Add checksum for validation
@@ -1752,12 +1882,11 @@ function generateChecksum(html) {
  * Save current state to undo stack
  */
 function saveState() {
+  if (historyRestoring) return;
+
   // ✅ Save current canvas state to undo stack
-  const canvasData = {
-    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
-    timestamp: Date.now(),
-    tool: currentTool
-  };
+  const canvasData = createStateSnapshot();
+  if (!canvasData) return;
   
   undoStack.push(canvasData);
   
@@ -1768,27 +1897,28 @@ function saveState() {
   
   // ✅ Clear redo stack when new action performed
   redoStack = [];
+  updateUndoRedoButtons();
   
   console.log(`💾 State saved (${undoStack.length} states)`);
 }
 
 function undo() {
-  if (undoStack.length === 0) {
+  if (undoStack.length <= 1) {
     console.warn('⏳ Nothing to undo');
     return;
   }
   
-  // Save current state to redo
-  const currentState = {
-    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
-    timestamp: Date.now(),
-    tool: currentTool
-  };
-  redoStack.push(currentState);
-  
-  // Restore previous state
-  const previousState = undoStack.pop();
-  ctx.putImageData(previousState.imageData, 0, 0);
+  const currentState = undoStack.pop();
+  if (currentState) {
+    redoStack.push(currentState);
+  }
+
+  const previousState = undoStack[undoStack.length - 1];
+  if (previousState) {
+    applyStateSnapshot(previousState);
+  }
+
+  updateUndoRedoButtons();
   
   console.log(`↶ Undo performed (${undoStack.length} states left)`);
 }
@@ -1799,20 +1929,78 @@ function redo() {
     return;
   }
   
-  // Save current state to undo
-  const currentState = {
-    imageData: ctx.getImageData(0, 0, canvas.width, canvas.height),
-    timestamp: Date.now(),
-    tool: currentTool
-  };
-  undoStack.push(currentState);
-  
-  // Restore next state
   const nextState = redoStack.pop();
-  ctx.putImageData(nextState.imageData, 0, 0);
+    if (nextState) {
+    undoStack.push(nextState);
+    applyStateSnapshot(nextState);
+    }
+
+    updateUndoRedoButtons();
   
   console.log(`↷ Redo performed (${redoStack.length} states left)`);
 }
+
+  function restoreCanvasSnapshot(dataUrl) {
+    if (!ctx || !canvas || !dataUrl) return;
+
+    const image = new Image();
+    image.onload = () => {
+      try {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      } catch (error) {
+        console.warn('⚠️ Failed to restore canvas snapshot', error);
+      }
+    };
+    image.src = dataUrl;
+  }
+
+  function applyStateSnapshot(snapshot) {
+    if (!snapshot) return;
+
+    historyRestoring = true;
+    try {
+      const container = document.getElementById('canvasElements');
+      if (container && typeof snapshot.html === 'string') {
+        container.innerHTML = snapshot.html;
+        restoreElementInteractions();
+      }
+
+      if (snapshot.boardData && typeof snapshot.boardData === 'object') {
+        boardData = JSON.parse(JSON.stringify(snapshot.boardData));
+      }
+
+      const boardNameInput = document.getElementById('boardName');
+      if (boardNameInput && typeof snapshot.boardName === 'string') {
+        boardNameInput.value = snapshot.boardName;
+      }
+      if (boardData) {
+        boardData.name = snapshot.boardName || boardData.name;
+      }
+
+      if (typeof snapshot.zoomLevel === 'number') {
+        zoomLevel = snapshot.zoomLevel;
+        updateZoom();
+      }
+      if (typeof snapshot.panX === 'number') panX = snapshot.panX;
+      if (typeof snapshot.panY === 'number') panY = snapshot.panY;
+      if (typeof snapshot.timerSeconds === 'number') {
+        timerSeconds = snapshot.timerSeconds;
+        updateTimerDisplay();
+      }
+      if (snapshot.currentTool) selectTool(snapshot.currentTool);
+      if (snapshot.currentColor) selectColor(snapshot.currentColor);
+
+      if (snapshot.imageData) {
+        restoreCanvasSnapshot(snapshot.imageData);
+      }
+
+      saveBoardState();
+    } finally {
+      historyRestoring = false;
+      updateUndoRedoButtons();
+    }
+  }
 
 /**
  * Restore element interactions after undo/redo
@@ -1836,15 +2024,23 @@ function restoreElementInteractions() {
 function updateUndoRedoButtons() {
     const undoBtn = document.getElementById('btnUndo');
     const redoBtn = document.getElementById('btnRedo');
+  const saveBtn = document.getElementById('btnSave');
     
     if (undoBtn) {
-        undoBtn.disabled = undoStack.length === 0;
-        undoBtn.classList.toggle('disabled', undoStack.length === 0);
+    const disabled = undoStack.length <= 1;
+    undoBtn.disabled = disabled;
+    undoBtn.classList.toggle('disabled', disabled);
     }
     
     if (redoBtn) {
-        redoBtn.disabled = redoStack.length === 0;
-        redoBtn.classList.toggle('disabled', redoStack.length === 0);
+    const disabled = redoStack.length === 0;
+    redoBtn.disabled = disabled;
+    redoBtn.classList.toggle('disabled', disabled);
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('disabled');
     }
 }
 
@@ -1967,6 +2163,9 @@ function initializeUndoRedo() {
     const initialState = createStateSnapshot();
     if (initialState) {
         lastSaveState = initialState;
+    if (undoStack.length === 0) {
+      undoStack.push(initialState);
+    }
     }
     
     // Setup keyboard shortcuts
@@ -2035,11 +2234,13 @@ function toggleTraybar() {
   
   if (traybarVisible) {
     traybar.classList.remove('hidden');
-    toggle.innerHTML = '🔧';
+    traybar.classList.add('expanded');
+    toggle.innerHTML = '◀';
     mainCanvas.classList.add('traybar-visible');
   } else {
     traybar.classList.add('hidden');
-    toggle.innerHTML = '◀';
+    traybar.classList.remove('expanded');
+    toggle.innerHTML = '▶';
     mainCanvas.classList.remove('traybar-visible');
   }
 }

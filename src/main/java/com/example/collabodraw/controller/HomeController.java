@@ -148,12 +148,14 @@ public class HomeController {
             
             // Save using existing createWhiteboard method
             Board savedBoard = whiteboardService.createWhiteboard(whiteboardDto);
+            whiteboardService.addUserToWhiteboard(savedBoard.getBoardId(), user.getUserId(), "owner");
             
             response.put("success", true);
             response.put("id", savedBoard.getBoardId());
             response.put("name", savedBoard.getBoardName());
 
             dashboardRealtimeService.publishBoardEvent(savedBoard.getBoardId(), "BOARD_CREATED");
+            dashboardRealtimeService.publishUserEvent(user.getUserId(), "BOARD_CREATED", "Board created");
             
             return ResponseEntity.ok(response);
             

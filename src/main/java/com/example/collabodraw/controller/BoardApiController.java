@@ -3,6 +3,7 @@ package com.example.collabodraw.controller;
 import com.example.collabodraw.model.entity.Board;
 import com.example.collabodraw.model.entity.User;
 import com.example.collabodraw.model.dto.WhiteboardDto;
+import com.example.collabodraw.service.DashboardRealtimeService;
 import com.example.collabodraw.service.UserService;
 import com.example.collabodraw.service.WhiteboardService;
 import org.springframework.http.HttpStatus;
@@ -26,11 +27,15 @@ public class BoardApiController {
 
     private final UserService userService;
     private final WhiteboardService whiteboardService;
+    private final DashboardRealtimeService dashboardRealtimeService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public BoardApiController(UserService userService, WhiteboardService whiteboardService) {
+    public BoardApiController(UserService userService,
+                              WhiteboardService whiteboardService,
+                              DashboardRealtimeService dashboardRealtimeService) {
         this.userService = userService;
         this.whiteboardService = whiteboardService;
+        this.dashboardRealtimeService = dashboardRealtimeService;
     }
 
     /**
@@ -134,6 +139,8 @@ public class BoardApiController {
             Board created = whiteboardService.createWhiteboard(dto);
             // ensure owner membership
             whiteboardService.addUserToWhiteboard(created.getBoardId(), currentUser.getUserId(), "owner");
+                dashboardRealtimeService.publishBoardEvent(created.getBoardId(), "BOARD_CREATED");
+                dashboardRealtimeService.publishUserEvent(currentUser.getUserId(), "BOARD_CREATED", "Board created");
 
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "success", true,
