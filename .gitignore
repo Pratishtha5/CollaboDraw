@@ -65,3 +65,7 @@ hs_err_pid*.log
 
 # Local environment overrides
 .env
+
+# Document files
+*.doc
+*.docx
