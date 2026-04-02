@@ -47,7 +47,7 @@
       try {
         const payload = JSON.parse(message.body);
         if (payload && payload.type === 'participants') {
-          handler(payload.items || []);
+          handler(payload.items || [], payload);
         }
       } catch {}
     });
@@ -89,6 +89,16 @@
     });
   }
 
+  function subscribeDashboard(userId, handler){
+    if (!stompClient || !userId) return { unsubscribe: ()=>{} };
+    return stompClient.subscribe(`/topic/dashboard.${userId}.updates`, (message)=>{
+      try {
+        const payload = JSON.parse(message.body);
+        handler(payload || {});
+      } catch {}
+    });
+  }
+
   function publishVersion(boardId, version){
     if (!stompClient) return;
     stompClient.send(`/app/board/${boardId}/version`, { 'content-type': 'application/json' }, JSON.stringify(version || {}));
@@ -102,6 +112,7 @@
   window.CollaboSocket = {
     connect, disconnect, joinBoard, leaveBoard, heartbeat, updateCursor,
     subscribeParticipants, subscribeCursors, subscribeVersions, subscribeElements,
+    subscribeDashboard,
     publishVersion, publishElement,
     startHeartbeat(boardId, intervalMs=15000){
       if (heartbeatTimer) clearInterval(heartbeatTimer);

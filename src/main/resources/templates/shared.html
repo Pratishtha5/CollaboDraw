@@ -666,7 +666,7 @@
       </nav>
 
       <!-- Stats Bar -->
-      <div class="stats-bar">
+      <div class="stats-bar" id="sharedStatsBar">
         <div class="stat-item">
           <span class="stat-number" th:text="${sharedStats != null and sharedStats.totalSharedBoards != null} ? sharedStats.totalSharedBoards : 12">12</span>
           <span class="stat-label">Shared Boards</span>
@@ -694,8 +694,13 @@
         <div class="filter-pill" data-filter="pending">Pending Invites</div>
       </div>
 
+      <div id="pendingInvitesBox" style="display:none; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:14px; margin-bottom:16px;">
+        <div style="font-weight:700; margin-bottom:8px; color:#1f2937;">Pending Invites</div>
+        <div id="pendingInvitesList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+
       <!-- Boards Grid -->
-      <div class="boards-grid" th:if="${sharedBoards != null and not #lists.isEmpty(sharedBoards)}">
+      <div class="boards-grid" id="sharedBoardsGrid">
         <div class="shared-board-card" th:each="board : ${sharedBoards}" th:onclick="'openSharedBoard(\'' + ${board.id} + '\')'" th:data-permission="${board.userPermission}">
           <div class="board-preview">
             <span th:text="${board.icon ?: '📊'}">📊</span>
@@ -707,15 +712,15 @@
               <span th:text="${board.title}">Product Roadmap Q4</span>
             </div>
             <div class="board-owner">
-              <div class="owner-avatar" th:text="${board.owner?.username?.substring(0,2)?.toUpperCase() ?: 'SM'}" th:style="'background: var(--purple)'">SM</div>
-              <span>Shared by <span th:text="${board.owner?.username ?: 'Board Owner'}">Board Owner</span></span>
+              <div class="owner-avatar" th:text="${board.ownerInitials ?: 'SM'}" th:style="'background: var(--purple)'">SM</div>
+              <span>Shared by <span th:text="${board.ownerUsername ?: 'Board Owner'}">Board Owner</span></span>
             </div>
             <div class="board-meta">
               <div class="last-activity">
                 <div class="activity-dot" th:if="${board.hasRecentActivity}"></div>
-                <span th:text="${board.lastActivity}">Active 2h ago</span>
+                <span th:attr="data-time=${board.lastActivityAt}" th:text="${board.lastActivity}">Active 2h ago</span>
               </div>
-              <span th:text="${#lists.size(board.collaborators) + ' collaborators'}">5 collaborators</span>
+              <span th:text="${board.collaboratorCount + ' collaborators'}">5 collaborators</span>
             </div>
             
             <div class="collaboration-info" th:if="${board.recentActivityText}">
@@ -733,7 +738,7 @@
       </div>
 
       <!-- Default Boards Grid (fallback when no data) -->
-      <div class="boards-grid" th:if="${sharedBoards == null or #lists.isEmpty(sharedBoards)}">
+      <div class="boards-grid" th:if="${false}">
         <div class="shared-board-card" onclick="openSharedBoard('shared-1')" data-permission="edit">
           <div class="board-preview">
             📊
@@ -835,7 +840,7 @@
       </div>
 
       <!-- Empty State (shown only when there are no shared boards) -->
-      <div class="empty-state" th:if="${(sharedBoards == null or #lists.isEmpty(sharedBoards)) and showEmptyState == true}" style="display: none;">
+      <div class="empty-state" id="sharedEmptyState" th:if="${(sharedBoards == null or #lists.isEmpty(sharedBoards)) and showEmptyState == true}">
         <div class="empty-icon">🤝</div>
         <h3>No shared boards yet</h3>
         <p>When others share boards with you, they'll appear here</p>
@@ -848,7 +853,12 @@
     </main>
   </div>
 
-  <script>
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <script th:src="@{/js/collab-socket.js}"></script>
+
+  <script th:inline="javascript">
+    const currentUserId = /*[[${currentUser != null ? currentUser.userId : null}]]*/ null;
     // Sidebar toggle functionality
     document.addEventListener('DOMContentLoaded', function() {
       const sidebar = document.getElementById('sidebar');
@@ -896,6 +906,7 @@
 
     function filterBoards(filter) {
       const boards = document.querySelectorAll('.shared-board-card');
+      const pendingBox = document.getElementById('pendingInvitesBox');
       boards.forEach(board => {
         const permission = board.dataset.permission;
         let show = true;
@@ -908,7 +919,7 @@
             show = permission === 'view';
             break;
           case 'pending':
-            show = permission === 'pending';
+            show = false;
             break;
           case 'recent':
             show = board.querySelector('.collaboration-info') !== null;
@@ -920,6 +931,15 @@
 
         board.style.display = show ? 'block' : 'none';
       });
+      if (pendingBox) {
+        if (filter === 'pending') {
+          if (pendingBox.dataset.hasInvites === 'true') {
+            pendingBox.style.display = 'block';
+          }
+        } else if (pendingBox.dataset.hasInvites !== 'true') {
+          pendingBox.style.display = 'none';
+        }
+      }
     }
 
     function searchBoards(searchTerm) {
@@ -933,42 +953,145 @@
       });
     }
 
-    function openSharedBoard(boardId) {
-      // Navigate to whiteboard with shared board context
-      window.location.href = `/mainscreen?shared=${boardId}`;
+    function formatRelative(raw) {
+      if (!raw) return 'No activity';
+      const ts = Date.parse(raw);
+      if (Number.isNaN(ts)) return String(raw);
+      const sec = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+      if (sec < 60) return sec + 's ago';
+      const min = Math.floor(sec / 60);
+      if (min < 60) return min + 'm ago';
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return hr + 'h ago';
+      const day = Math.floor(hr / 24);
+      return day + 'd ago';
     }
 
-    function copySharedBoard(boardId) {
-      if (confirm('Create a copy of this shared board in your workspace?')) {
-        // Navigate to whiteboard with copied board
-        window.location.href = `/mainscreen?copy-shared=${boardId}`;
+    function refreshRelativeTime() {
+      document.querySelectorAll('[data-time]').forEach((el) => {
+        el.textContent = formatRelative(el.getAttribute('data-time'));
+      });
+    }
+
+    async function refreshSharedData() {
+      try {
+        const res = await fetch('/api/shared/data', { credentials: 'include' });
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!payload || !payload.success) return;
+        renderShared(payload.boards || [], payload.stats || {}, payload.pendingInvites || []);
+      } catch (_) {}
+    }
+
+    function renderShared(boards, stats, pendingInvites) {
+      const grid = document.getElementById('sharedBoardsGrid');
+      if (!grid) return;
+
+      const empty = document.getElementById('sharedEmptyState');
+      renderPendingInvites(Array.isArray(pendingInvites) ? pendingInvites : []);
+      if (!boards.length) {
+        grid.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+      } else {
+        if (empty) empty.style.display = 'none';
+        grid.innerHTML = boards.map((b) => `
+          <div class="shared-board-card" onclick="openSharedBoard('${b.boardId}')" data-permission="${b.userPermission || 'view'}">
+            <div class="board-preview">${b.icon || '📊'}<div class="permission-badge badge-${b.userPermission || 'view'}">${(b.userPermission || 'view').toUpperCase()}</div></div>
+            <div class="board-info">
+              <div class="board-title"><div class="share-indicator">👥</div><span>${b.title || 'Shared Board'}</span></div>
+              <div class="board-owner"><div class="owner-avatar">${b.ownerInitials || 'SM'}</div><span>Shared by <span>${b.ownerUsername || 'Owner'}</span></span></div>
+              <div class="board-meta"><div class="last-activity"><div class="activity-dot" style="${b.hasRecentActivity ? '' : 'display:none'}"></div><span data-time="${b.lastActivityAt || ''}">${formatRelative(b.lastActivityAt)}</span></div><span>${b.collaboratorCount || 0} collaborators</span></div>
+              <div class="collaboration-info"><h4>Recent Activity</h4><p>${b.recentActivityText || 'No recent activity'}</p></div>
+              <div class="board-actions">
+                <button class="action-btn primary" onclick="event.stopPropagation(); openSharedBoard('${b.boardId}')">${b.userPermission === 'view' ? 'View' : 'Open'}</button>
+                <button class="action-btn" onclick="event.stopPropagation(); copySharedBoard('${b.boardId}')">Copy</button>
+                <button class="action-btn" onclick="event.stopPropagation(); leaveBoard('${b.boardId}')">Leave</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
       }
+
+      const statNumbers = document.querySelectorAll('#sharedStatsBar .stat-number');
+      if (statNumbers.length >= 4) {
+        statNumbers[0].textContent = stats.totalSharedBoards ?? boards.length;
+        statNumbers[1].textContent = stats.activeCollaborations ?? 0;
+        statNumbers[2].textContent = stats.pendingInvites ?? 0;
+        statNumbers[3].textContent = stats.recentActivityTime ?? 'Live';
+      }
+      refreshRelativeTime();
     }
 
-    function leaveBoard(boardId) {
-      if (confirm('Are you sure you want to leave this shared board?')) {
-        // Remove the board card from the UI
-        const boardCard = document.querySelector(`[onclick*="${boardId}"]`);
-        if (boardCard) {
-          boardCard.remove();
-          
-          // Update stats
-          const totalShared = document.querySelector('.stat-number');
-          const currentCount = parseInt(totalShared.textContent);
-          totalShared.textContent = currentCount - 1;
-          
-          // Show success message
-          alert('You have left the shared board');
-          
-          // If no more boards, show empty state
-          const remainingBoards = document.querySelectorAll('.shared-board-card');
-          if (remainingBoards.length === 0) {
-            document.querySelector('.boards-grid').style.display = 'none';
-            document.querySelector('.empty-state').style.display = 'block';
-          }
+    function renderPendingInvites(items) {
+      const box = document.getElementById('pendingInvitesBox');
+      const list = document.getElementById('pendingInvitesList');
+      if (!box || !list) return;
+      if (!items.length) {
+        box.dataset.hasInvites = 'false';
+        box.style.display = 'none';
+        list.innerHTML = '';
+        return;
+      }
+      box.dataset.hasInvites = 'true';
+      box.style.display = 'block';
+      list.innerHTML = items.map((i) => `
+        <div style="display:flex; justify-content:space-between; gap:10px; border:1px solid #f3f4f6; border-radius:8px; padding:10px;">
+          <div>
+            <div style="font-weight:600">${i.boardName || 'Board'}</div>
+            <div style="font-size:12px; color:#6b7280">From ${i.inviter || 'Unknown'} as ${i.role || 'viewer'}</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="action-btn primary" onclick="acceptInvite('${i.inviteId}')">Accept</button>
+            <button class="action-btn" onclick="declineInvite('${i.inviteId}')">Decline</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function acceptInvite(inviteId) {
+      try {
+        const res = await fetch(`/api/shared/invites/${inviteId}/accept`, { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          alert(data.message || 'Failed to accept invite');
+          return;
         }
+        refreshSharedData();
+      } catch (_) {
+        alert('Failed to accept invite');
       }
     }
+
+    async function declineInvite(inviteId) {
+      try {
+        const res = await fetch(`/api/shared/invites/${inviteId}/decline`, { method: 'POST', credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          alert(data.message || 'Failed to decline invite');
+          return;
+        }
+        refreshSharedData();
+      } catch (_) {
+        alert('Failed to decline invite');
+      }
+    }
+
+    window.addEventListener('storage', function(ev){
+      if (ev && ev.key === 'collabodraw-boards-updated') refreshSharedData();
+    });
+
+    try {
+      if (window.CollaboSocket && currentUserId) {
+        CollaboSocket.connect(() => {
+          CollaboSocket.subscribeDashboard(currentUserId, () => {
+            refreshSharedData();
+          });
+        });
+      }
+    } catch (_) {}
+
+    setInterval(refreshRelativeTime, 30000);
+    refreshSharedData();
   </script>
   <script th:src="@{/board-operations.js}"></script>
 </body>

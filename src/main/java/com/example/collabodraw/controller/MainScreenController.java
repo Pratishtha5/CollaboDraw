@@ -27,7 +27,8 @@ public class MainScreenController {
             @RequestParam(value = "board", required = false) String boardId,
             @RequestParam(value = "shared", required = false) String sharedBoardId,
             @RequestParam(value = "template", required = false) String templateId,
-            @RequestParam(value = "preview", required = false) String previewId) {
+            @RequestParam(value = "preview", required = false) String previewId,
+            @RequestParam(value = "seedTemplate", required = false) String seedTemplate) {
         
         if (authentication != null && authentication.isAuthenticated()) {
             String username = authentication.getName();
@@ -49,6 +50,9 @@ public class MainScreenController {
         }
         if (previewId != null) {
             model.addAttribute("previewId", previewId);
+        }
+        if (seedTemplate != null) {
+            model.addAttribute("seedTemplate", seedTemplate);
         }
         
         return "mainscreen"; // looks for src/main/resources/templates/mainscreen.html

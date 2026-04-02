@@ -1,6 +1,20 @@
 // Board operations - Frontend navigation only
 // Business logic is handled by Java Spring Boot controllers
 
+function emitBoardsChanged(action, boardId) {
+    const payload = {
+        action: action || 'updated',
+        boardId: boardId || null,
+        timestamp: Date.now()
+    };
+    try {
+        localStorage.setItem('collabodraw-boards-updated', JSON.stringify(payload));
+    } catch (_) {}
+    try {
+        window.dispatchEvent(new CustomEvent('boards:changed', { detail: payload }));
+    } catch (_) {}
+}
+
 /**
  * Open a board in the main editor - Navigate to Java controller
  */
@@ -97,6 +111,7 @@ async function duplicateBoard(boardId) {
         
         if (data.success) {
             alert('Board duplicated successfully!');
+            emitBoardsChanged('duplicated', data.newBoardId || boardId);
             // Refresh the page to show the new board
             location.reload();
         } else {
@@ -125,6 +140,7 @@ async function deleteBoard(boardId) {
             
             if (data.success) {
                 alert('Board deleted successfully!');
+                emitBoardsChanged('deleted', boardId);
                 // Refresh the page to remove the deleted board
                 location.reload();
             } else {
@@ -153,6 +169,7 @@ async function copySharedBoard(boardId) {
         
         if (data.success) {
             alert('Shared board copied successfully!');
+            emitBoardsChanged('copied', data.newBoardId || boardId);
             // Redirect to my-content page to show the copied board
             window.location.href = '/my-content';
         } else {
@@ -181,6 +198,7 @@ async function leaveBoard(boardId) {
             
             if (data.success) {
                 alert('Successfully left the board!');
+                emitBoardsChanged('left', boardId);
                 // Refresh the page to remove the board from shared list
                 location.reload();
             } else {

@@ -650,14 +650,14 @@
         <div class="category-filter" data-category="planning">Planning</div>
       </div>
 
-      <!-- Templates Grid (dynamic from DB) -->
-      <div class="template-section">
+      <div class="template-section" th:if="${templates != null and not #lists.isEmpty(templates)}">
         <div class="section-header">
-          <h2 class="section-title">All Templates</h2>
-          <span class="section-count" th:text="${totalTemplates} + ' templates'"></span>
+          <h2 class="section-title">Popular Picks</h2>
+          <span class="section-count">Most used by teams</span>
         </div>
         <div class="templates-grid">
-          <div class="template-card" th:each="t : ${templates}"
+          <div class="template-card featured" th:each="t, i : ${templates}" th:if="${i.index < 4}"
+               th:attr="data-category=${t.category},data-featured=${t.featured},data-key=${t.templateKey}"
                th:onclick="|useTemplate('${t.templateKey}')|">
             <div class="template-icon" th:text="${t.icon != null ? t.icon : '📄'}">📄</div>
             <h3 class="template-title" th:text="${t.name}">Template Name</h3>
@@ -667,6 +667,33 @@
               <div class="template-badge"
                    th:classappend="${t.plan == 'PRO'} ? ' badge-pro' : ' badge-free'"
                    th:text="${t.plan == 'PRO'} ? 'Pro' : 'Free'">Free</div>
+            </div>
+            <div class="featured-badge">Popular</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Templates Grid (dynamic from DB) -->
+      <div class="template-section">
+        <div class="section-header">
+          <h2 class="section-title">All Templates</h2>
+          <span class="section-count" th:text="${totalTemplates} + ' templates'"></span>
+        </div>
+        <div class="templates-grid">
+          <div class="template-card" th:each="t : ${templates}"
+               th:attr="data-category=${t.category},data-featured=${t.featured},data-key=${t.templateKey}"
+               th:onclick="|useTemplate('${t.templateKey}')|">
+            <div class="template-icon" th:text="${t.icon != null ? t.icon : '📄'}">📄</div>
+            <h3 class="template-title" th:text="${t.name}">Template Name</h3>
+            <p class="template-description" th:text="${t.description}">Description</p>
+            <div class="template-meta">
+              <div class="template-usage" th:text="'👥 ' + ${t.usageCount} + ' uses'">👥 0 uses</div>
+              <div class="template-badge"
+                   th:classappend="${t.plan == 'PRO'} ? ' badge-pro' : ' badge-free'"
+                   th:text="${t.plan == 'PRO'} ? 'Pro' : 'Free'">Free</div>
+            </div>
+            <div style="font-size:11px; color:#6b7280; margin-bottom:10px;">
+              API: <a th:href="@{'/api/templates/content/' + ${t.templateKey}}" target="_blank" rel="noopener" style="color:#0e7e58; text-decoration:none">/api/templates/content/<span th:text="${t.templateKey}">key</span></a>
             </div>
             <div class="template-actions">
               <button class="template-btn btn-primary"
@@ -710,8 +737,16 @@
     function filterTemplates(category) {
       const templates = document.querySelectorAll('.template-card');
       templates.forEach(template => {
-        // For now, show all templates. In a real app, you'd filter based on data attributes
-        template.style.display = 'block';
+        if (category === 'all') {
+          template.style.display = 'block';
+          return;
+        }
+        const cardCategory = (template.getAttribute('data-category') || '').toLowerCase();
+        const featured = (template.getAttribute('data-featured') || '').toLowerCase() === 'true';
+        const matches = category === 'popular'
+          ? featured || cardCategory === 'popular'
+          : cardCategory === category;
+        template.style.display = matches ? 'block' : 'none';
       });
     }
 
@@ -727,13 +762,46 @@
     }
 
     function useTemplate(templateId) {
-      // Navigate to whiteboard with the selected template
-      window.location.href = '/mainscreen?template=' + encodeURIComponent(templateId);
+      window.location.href = '/templates/use/' + encodeURIComponent(templateId);
     }
 
-    function previewTemplate(templateId) {
-      // For now, just use the template. In a real app, you might show a preview modal
-      alert(`Preview for ${templateId} template (feature coming soon)`);
+    async function previewTemplate(templateId) {
+      try {
+        const res = await fetch('/api/templates/preview/' + encodeURIComponent(templateId), { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          alert(data.message || 'Failed to load preview');
+          return;
+        }
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:10000;';
+        modal.innerHTML = `
+          <div style="width:min(920px,92vw);background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+            <div style="padding:14px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">
+              <strong>${(data.title || 'Template Preview')}</strong>
+              <button id="tplPreviewClose" style="border:none;background:#f3f4f6;border-radius:8px;padding:6px 10px;cursor:pointer">Close</button>
+            </div>
+            <div style="padding:16px;max-height:68vh;overflow:auto;background:#f8fafc">
+              <div style="position:relative;min-height:420px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:12px" id="tplPreviewCanvas">${data.elements || '<em>Blank template</em>'}</div>
+              <div style="margin-top:12px;color:#6b7280;font-size:13px">${data.description || ''}</div>
+            </div>
+            <div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:8px">
+              <button id="tplPreviewUse" style="background:#20b97c;color:#fff;border:none;border-radius:8px;padding:8px 12px;cursor:pointer">Use Template</button>
+            </div>
+          </div>`;
+
+        document.body.appendChild(modal);
+        const close = () => modal.remove();
+        modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+        modal.querySelector('#tplPreviewClose').addEventListener('click', close);
+        modal.querySelector('#tplPreviewUse').addEventListener('click', () => {
+          close();
+          useTemplate(templateId);
+        });
+      } catch (e) {
+        alert('Failed to load preview');
+      }
     }
   </script>
   <script th:src="@{/board-operations.js}"></script>

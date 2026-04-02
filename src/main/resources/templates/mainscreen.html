@@ -1000,7 +1000,7 @@
           >
             Notifications
           </div>
-          <div style="padding: 12px 16px; font-size: 14px">
+          <div id="notifList" style="padding: 12px 16px; font-size: 14px">
             <div style="margin-bottom: 8px">No new notifications</div>
             <div style="color: #6b7280">You're all caught up.</div>
           </div>
@@ -1456,6 +1456,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
   <script th:src="@{/js/collab-socket.js}"></script>
+  <script th:src="@{/js/notification-service.js}"></script>
 
   <!-- External JavaScript -->
   <script th:src="@{/whiteboard.js}"></script>
@@ -1471,6 +1472,7 @@
         const sharedBoardId = /*[[${sharedBoardId}]]*/ null;
         const templateId = /*[[${templateId}]]*/ null;
         const previewId = /*[[${previewId}]]*/ null;
+        const seedTemplate = /*[[${seedTemplate}]]*/ null;
         const currentUserName =
           /*[[${currentUser != null ? currentUser.username : null}]]*/ null;
         const currentUserInitials =
@@ -1481,20 +1483,31 @@
           let id = modelBoardId;
           try {
             const qp = new URLSearchParams(window.location.search);
-            if (!id && qp.has('board')) id = parseInt(qp.get('board'), 10);
-            if (!id && qp.has('shared')) id = parseInt(qp.get('shared'), 10);
+            const normalize = (v) => {
+              if (v == null) return null;
+              let text = String(v).trim();
+              if (!text) return null;
+              if (text.startsWith('board-')) text = text.substring('board-'.length);
+              const n = parseInt(text, 10);
+              return Number.isFinite(n) && n > 0 ? n : null;
+            };
+            if (!id && qp.has('board')) id = normalize(qp.get('board'));
+            if (!id && qp.has('shared')) id = normalize(qp.get('shared'));
             // Do NOT treat 'session' as a numeric board id; it is a human code and
             // must be resolved by the client via /api/boards/session before setting board.
           } catch(_) {}
           return (Number.isFinite(id) && id > 0) ? id : null;
         }
 
+        const resolvedBoardId = resolveBoardId();
+
         // ✅ Set global window.CD without hardcoded default
         window.CD = {
-          boardId: resolveBoardId(),
+          boardId: resolvedBoardId,
           sharedBoardId,
           templateId,
           previewId,
+          seedTemplate,
           currentUserName,
           currentUserInitials,
         };
@@ -1502,8 +1515,8 @@
         console.log("🎯 Board Config:", window.CD);
 
         // Handle different parameter scenarios
-        if (boardId) {
-          console.log("📋 Loading board (API):", boardId);
+        if (resolvedBoardId) {
+          console.log("📋 Loading board (API):", resolvedBoardId);
           // loadBoardData(boardId);
         } else if (sharedBoardId) {
           console.log("🔗 Loading shared board (API):", sharedBoardId);

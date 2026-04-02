@@ -1,8 +1,11 @@
 package com.example.collabodraw.controller;
 
 import com.example.collabodraw.model.entity.User;
+import com.example.collabodraw.model.dto.WhiteboardDto;
+import com.example.collabodraw.service.DashboardRealtimeService;
 import com.example.collabodraw.service.TemplateService;
 import com.example.collabodraw.service.UserService;
+import com.example.collabodraw.service.WhiteboardService;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -21,10 +24,16 @@ public class TemplateController {
 
     private final UserService userService;
     private final TemplateService templateService;
+    private final WhiteboardService whiteboardService;
+    private final DashboardRealtimeService dashboardRealtimeService;
 
-    public TemplateController(UserService userService, TemplateService templateService) {
+    public TemplateController(UserService userService, TemplateService templateService,
+                              WhiteboardService whiteboardService,
+                              DashboardRealtimeService dashboardRealtimeService) {
         this.userService = userService;
         this.templateService = templateService;
+        this.whiteboardService = whiteboardService;
+        this.dashboardRealtimeService = dashboardRealtimeService;
     }
 
     /**
@@ -66,9 +75,31 @@ public class TemplateController {
         if (authentication == null || !authentication.isAuthenticated()) {
             return "redirect:/auth";
         }
-        // Increment usage when a template is used to create a board
+
+        User user = userService.findByUsername(authentication.getName());
+        if (user == null) {
+            return "redirect:/auth";
+        }
+
+        // Increment usage when a template is used and create a dedicated board for that template.
         try { templateService.incrementUsage(templateKey); } catch (Exception ignored) {}
-        return "redirect:/mainscreen?template=" + templateKey;
+
+        String templateName = "Template";
+        var template = templateService.getTemplateByKey(templateKey);
+        if (template != null && template.getName() != null && !template.getName().isBlank()) {
+            templateName = template.getName();
+        }
+
+        WhiteboardDto dto = new WhiteboardDto();
+        dto.setOwnerId(user.getUserId());
+        dto.setName(templateName + " Board");
+        dto.setIsPublic(false);
+
+        var board = whiteboardService.createWhiteboard(dto);
+        whiteboardService.addUserToWhiteboard(board.getBoardId(), user.getUserId(), "owner");
+        dashboardRealtimeService.publishBoardEvent(board.getBoardId(), "BOARD_CREATED");
+
+        return "redirect:/mainscreen?board=" + board.getBoardId() + "&template=" + templateKey + "&seedTemplate=1";
     }
 
     /**

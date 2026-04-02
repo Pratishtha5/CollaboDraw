@@ -10,6 +10,7 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Repository for BoardMembership entity operations using JDBC
@@ -46,6 +47,12 @@ public class BoardMembershipRepository {
     public List<BoardMembership> findByBoardId(Long boardId) {
         String sql = "SELECT * FROM board_membership WHERE board_id = ? ORDER BY joined_at";
         return jdbcTemplate.query(sql, membershipRowMapper, boardId);
+    }
+
+    public List<Long> findUserIdsByBoardId(Long boardId) {
+        return findByBoardId(boardId).stream()
+                .map(BoardMembership::getUserId)
+                .collect(Collectors.toList());
     }
 
     public List<BoardMembership> findByUserId(Long userId) {

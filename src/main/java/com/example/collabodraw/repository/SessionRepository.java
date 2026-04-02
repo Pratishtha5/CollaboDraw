@@ -38,6 +38,10 @@ public class SessionRepository {
         jdbc.update("UPDATE sessions SET connected_at = NOW() WHERE session_id=? AND user_id=? AND disconnected_at IS NULL", sessionId, userId);
     }
 
+    public void heartbeatByBoard(Long boardId, Long userId) {
+        jdbc.update("UPDATE sessions SET connected_at = NOW() WHERE board_id=? AND user_id=? AND disconnected_at IS NULL", boardId, userId);
+    }
+
     public boolean hasActive(Long boardId, Long userId) {
         Integer c = jdbc.queryForObject("SELECT COUNT(*) FROM sessions WHERE board_id=? AND user_id=? AND disconnected_at IS NULL", Integer.class, boardId, userId);
         return c != null && c > 0;
@@ -56,9 +60,16 @@ public class SessionRepository {
     }
 
     public List<Participant> activeParticipants(Long boardId) {
-        // show users seen in last 2 minutes
-        String sql = "SELECT DISTINCT u.user_id, u.username FROM sessions s JOIN users u ON s.user_id=u.user_id " +
-                "WHERE s.board_id=? AND s.disconnected_at IS NULL AND TIMESTAMPDIFF(SECOND, s.connected_at, NOW()) <= 120 ORDER BY u.username";
-        return jdbc.query(sql, (rs, i) -> new Participant(rs.getLong(1), rs.getString(2)), boardId);
+        // show users seen in last 2 minutes, including number of active websocket sessions per user
+        String sql = "SELECT u.user_id, u.username, COUNT(*) AS conn_count FROM sessions s JOIN users u ON s.user_id=u.user_id " +
+                "WHERE s.board_id=? AND s.disconnected_at IS NULL AND TIMESTAMPDIFF(SECOND, s.connected_at, NOW()) <= 120 " +
+                "GROUP BY u.user_id, u.username ORDER BY u.username";
+        return jdbc.query(sql, (rs, i) -> new Participant(rs.getLong(1), rs.getString(2), rs.getInt(3)), boardId);
+    }
+
+    public int activeConnectionCount(Long boardId) {
+        String sql = "SELECT COUNT(*) FROM sessions WHERE board_id=? AND disconnected_at IS NULL AND TIMESTAMPDIFF(SECOND, connected_at, NOW()) <= 120";
+        Integer count = jdbc.queryForObject(sql, Integer.class, boardId);
+        return count != null ? count : 0;
     }
 }

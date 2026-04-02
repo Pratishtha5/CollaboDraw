@@ -3,6 +3,9 @@ package com.example.collabodraw.controller;
 import com.example.collabodraw.model.dto.WhiteboardDto;
 import com.example.collabodraw.model.entity.User;
 import com.example.collabodraw.model.entity.Board;
+import com.example.collabodraw.model.entity.Template;
+import com.example.collabodraw.service.DashboardRealtimeService;
+import com.example.collabodraw.service.TemplateService;
 import com.example.collabodraw.service.UserService;
 import com.example.collabodraw.service.WhiteboardService;
 import org.springframework.http.HttpStatus;
@@ -26,10 +29,15 @@ public class HomeController {
 
     private final UserService userService;
     private final WhiteboardService whiteboardService;
+    private final TemplateService templateService;
+    private final DashboardRealtimeService dashboardRealtimeService;
 
-    public HomeController(UserService userService, WhiteboardService whiteboardService) {
+    public HomeController(UserService userService, WhiteboardService whiteboardService,
+                          TemplateService templateService, DashboardRealtimeService dashboardRealtimeService) {
         this.userService = userService;
         this.whiteboardService = whiteboardService;
+        this.templateService = templateService;
+        this.dashboardRealtimeService = dashboardRealtimeService;
     }
 
     @GetMapping("/")
@@ -47,14 +55,17 @@ public class HomeController {
                     model.addAttribute("currentUser", currentUser);
                     var whiteboards = whiteboardService.getWhiteboardsByOwner(currentUser.getUserId());
                     model.addAttribute("whiteboards", whiteboards);
+                    model.addAttribute("popularTemplates", templateService.getPopularTemplates(10));
                 } else {
                     model.addAttribute("username", username);
                     model.addAttribute("whiteboards", java.util.Collections.emptyList());
+                    model.addAttribute("popularTemplates", templateService.getPopularTemplates(10));
                 }
             } catch (Exception e) {
                 System.err.println("Error loading user data: " + e.getMessage());
                 model.addAttribute("username", username);
                 model.addAttribute("whiteboards", java.util.Collections.emptyList());
+                model.addAttribute("popularTemplates", templateService.getPopularTemplates(10));
             }
         } else {
             try {
@@ -66,8 +77,41 @@ public class HomeController {
             model.addAttribute("recentBoards", 0);
             model.addAttribute("sharedBoards", 0);
             model.addAttribute("templates", 0);
+            model.addAttribute("popularTemplates", templateService.getPopularTemplates(10));
         }
         return "home";
+    }
+
+    @GetMapping("/api/home/dashboard-data")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> dashboardData(Authentication authentication) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (authentication == null || !authentication.isAuthenticated()) {
+                response.put("success", false);
+                response.put("message", "Unauthorized");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+            }
+
+            User user = userService.findByUsername(authentication.getName());
+            if (user == null) {
+                response.put("success", false);
+                response.put("message", "User not found");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+
+            var boards = whiteboardService.getWhiteboardsByOwner(user.getUserId());
+            var templates = templateService.getPopularTemplates(10);
+
+            response.put("success", true);
+            response.put("boards", boards);
+            response.put("templates", templates);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 
     // ✅ FIXED: Use createWhiteboard() with WhiteboardDto instead
@@ -108,6 +152,8 @@ public class HomeController {
             response.put("success", true);
             response.put("id", savedBoard.getBoardId());
             response.put("name", savedBoard.getBoardName());
+
+            dashboardRealtimeService.publishBoardEvent(savedBoard.getBoardId(), "BOARD_CREATED");
             
             return ResponseEntity.ok(response);
             

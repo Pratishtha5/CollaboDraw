@@ -1,6 +1,7 @@
 package com.example.collabodraw.controller;
 
 import com.example.collabodraw.model.entity.User;
+import com.example.collabodraw.service.DashboardRealtimeService;
 import com.example.collabodraw.service.UserService;
 import com.example.collabodraw.service.WhiteboardService;
 import org.springframework.http.HttpStatus;
@@ -24,10 +25,13 @@ public class BoardController {
 
     private final UserService userService;
     private final WhiteboardService whiteboardService;
+    private final DashboardRealtimeService dashboardRealtimeService;
 
-    public BoardController(UserService userService, WhiteboardService whiteboardService) {
+    public BoardController(UserService userService, WhiteboardService whiteboardService,
+                           DashboardRealtimeService dashboardRealtimeService) {
         this.userService = userService;
         this.whiteboardService = whiteboardService;
+        this.dashboardRealtimeService = dashboardRealtimeService;
     }
 
     /**
@@ -255,6 +259,9 @@ public class BoardController {
             com.example.collabodraw.model.entity.Board duplicatedBoard =
                     whiteboardService.duplicateBoard(numericBoardId, currentUser.getUserId());
 
+                dashboardRealtimeService.publishBoardEvent(numericBoardId, "BOARD_DUPLICATED");
+                dashboardRealtimeService.publishBoardEvent(duplicatedBoard.getBoardId(), "BOARD_CREATED");
+
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "message", "Board duplicated successfully",
@@ -284,7 +291,12 @@ public class BoardController {
         try {
             User currentUser = requireCurrentUser(authentication);
             Long numericBoardId = resolveBoardId(boardId);
+
+            // Notify all board participants before deleting membership/board rows.
+            dashboardRealtimeService.publishBoardEvent(numericBoardId, "BOARD_DELETING");
             whiteboardService.deleteBoard(numericBoardId, currentUser.getUserId());
+
+            dashboardRealtimeService.publishUserEvent(currentUser.getUserId(), "BOARD_DELETED", "Board deleted");
 
             return ResponseEntity.ok(Map.of(
                 "success", true,
@@ -317,6 +329,9 @@ public class BoardController {
             com.example.collabodraw.model.entity.Board copiedBoard =
                     whiteboardService.copySharedBoard(numericBoardId, currentUser.getUserId());
 
+                dashboardRealtimeService.publishBoardEvent(numericBoardId, "BOARD_COPIED");
+                dashboardRealtimeService.publishBoardEvent(copiedBoard.getBoardId(), "BOARD_CREATED");
+
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "message", "Shared board copied successfully",
@@ -347,6 +362,9 @@ public class BoardController {
             User currentUser = requireCurrentUser(authentication);
             Long numericBoardId = resolveBoardId(boardId);
             whiteboardService.leaveBoard(numericBoardId, currentUser.getUserId());
+
+            dashboardRealtimeService.publishBoardEvent(numericBoardId, "MEMBER_LEFT");
+            dashboardRealtimeService.publishUserEvent(currentUser.getUserId(), "BOARD_LEFT", "You left a shared board");
 
             return ResponseEntity.ok(Map.of(
                 "success", true,

@@ -29,6 +29,14 @@ let boardData = {
   elements: [],
   settings: {}
 };
+
+// Backward-compatible helper used by drawing flow to track element metadata.
+function addCanvasElement(element) {
+  if (!element) return;
+  if (!Array.isArray(boardData.elementsMeta)) boardData.elementsMeta = [];
+  boardData.elementsMeta.push(element);
+}
+
 let mainCanvas = null;
 let canvas = null;
 let ctx = null;
@@ -83,10 +91,12 @@ function initializeApp() {
   setInterval(autoSave, CONFIG.AUTO_SAVE_INTERVAL);
   
   // Ensure a valid server board exists (handles ?session= as well)
-  ensureStartupBoard().then(() => {
+  ensureStartupBoard().then(async () => {
+    await applyTemplateSeedIfRequested();
     // Start real-time features after we have a valid board id
     startRealTimeSync();
-  }).catch(() => {
+  }).catch(async () => {
+    await applyTemplateSeedIfRequested();
     // Still try to start realtime (will no-op if board id unresolved)
     startRealTimeSync();
   });
@@ -149,7 +159,9 @@ async function ensureStartupBoard() {
 
     // If we already have a numeric board id, verify it exists
     if (Number.isFinite(boardId) && boardId > 0) {
-      const resp = await fetch(`/api/boards/${boardId}`);
+      const resp = await fetch(`/api/boards/${boardId}`, {
+        credentials: 'include'
+      });
       if (resp.ok) {
         return; // board exists
       }
@@ -160,6 +172,7 @@ async function ensureStartupBoard() {
     if (sessionCode) {
       const res = await fetch('/api/boards/session', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: sessionCode })
       });
@@ -190,6 +203,65 @@ async function ensureStartupBoard() {
   }
 }
 
+async function applyTemplateSeedIfRequested() {
+  try {
+    const templateId = window.CD && window.CD.templateId ? String(window.CD.templateId) : '';
+    const seedRaw = window.CD && window.CD.seedTemplate != null ? String(window.CD.seedTemplate).toLowerCase() : '';
+    const shouldSeed = seedRaw === '1' || seedRaw === 'true' || seedRaw === 'yes';
+    if (!templateId || !shouldSeed) return;
+
+    let boardId = window.CD && window.CD.boardId ? Number(String(window.CD.boardId).replace(/^board-/, '')) : null;
+    if (!boardId || Number.isNaN(boardId)) return;
+
+    const onceKey = `collabodraw-template-seeded-${boardId}-${templateId}`;
+    if (sessionStorage.getItem(onceKey) === '1') return;
+
+    // If board already has content, do not override it.
+    let hasExistingContent = false;
+    try {
+      const current = await fetch(`/api/boards/${boardId}/content`, { credentials: 'include' });
+      if (current.ok) {
+        const data = await current.json();
+        hasExistingContent = !!(data && typeof data.elements === 'string' && data.elements.trim().length > 0);
+      }
+    } catch (_) {}
+    if (hasExistingContent) {
+      sessionStorage.setItem(onceKey, '1');
+      return;
+    }
+
+    const res = await fetch(`/api/templates/use/${encodeURIComponent(templateId)}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const tpl = await res.json();
+    if (!tpl || !tpl.success) return;
+
+    const container = document.getElementById('canvasElements');
+    if (container) {
+      container.innerHTML = (typeof tpl.elements === 'string') ? tpl.elements : '';
+      document.querySelectorAll('.canvas-element').forEach(setupElementInteraction);
+    }
+
+    const settings = tpl.settings || {};
+    if (settings.zoom) { zoomLevel = Number(settings.zoom) || zoomLevel; updateZoom(); }
+    if (settings.tool) { selectTool(settings.tool); }
+    if (settings.color) { selectColor(settings.color); }
+
+    saveState();
+    sessionStorage.setItem(onceKey, '1');
+
+    // Remove one-shot seed flag from URL after seeding.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('seedTemplate');
+      window.history.replaceState({}, '', url);
+    } catch (_) {}
+
+    notify(`Template applied: ${tpl.title || templateId}`);
+  } catch (e) {
+    console.warn('Template seeding failed:', e);
+  }
+}
+
 async function loadBoardName() {
   try {
     // ✅ FIX: Handle boardId as either string or number
@@ -210,7 +282,9 @@ async function loadBoardName() {
       return;
     }
     
-    const response = await fetch(`/api/boards/${boardId}`);
+    const response = await fetch(`/api/boards/${boardId}`, {
+      credentials: 'include'
+    });
     if (!response.ok) return;
     
     const data = await response.json();
@@ -654,6 +728,7 @@ async function ensureServerBoardAndSave(name) {
         try {
           const r = await fetch('/api/boards/session', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ code: sessionCode.trim() })
           });
@@ -684,6 +759,7 @@ async function ensureServerBoardAndSave(name) {
       if (!window.CD.boardId) {
         const res = await fetch('/api/boards/new', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name || document.getElementById('boardName').value || 'Untitled Board' })
         });
@@ -2018,6 +2094,12 @@ function showNotification(message) {
   const notification = document.getElementById('notification');
   notification.innerHTML = message;
   notification.classList.add('show');
+
+  try {
+    if (window.NotificationService) {
+      window.NotificationService.push(message, 'info');
+    }
+  } catch (_) {}
   
   setTimeout(() => {
     notification.classList.remove('show');
@@ -2078,6 +2160,7 @@ function saveBoardState() {
       const id = window.CD.boardId;
       fetch(`/api/boards/${id}/content`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           elements: boardData.elements,
@@ -2185,6 +2268,33 @@ function restoreVersion(versionId) {
       boardData = JSON.parse(version.data);
       document.getElementById('canvasElements').innerHTML = boardData.elements;
       document.getElementById('boardName').value = boardData.name;
+
+      if (boardData.settings) {
+        if (boardData.settings.zoom) {
+          zoomLevel = boardData.settings.zoom;
+          updateZoom();
+        }
+        if (boardData.settings.timer != null) {
+          timerSeconds = boardData.settings.timer;
+          updateTimerDisplay();
+        }
+        if (boardData.settings.tool) selectTool(boardData.settings.tool);
+        if (boardData.settings.color) selectColor(boardData.settings.color);
+      }
+
+      try {
+        const snap = document.getElementById('wb-snapshot');
+        if (snap && snap.src && ctx) {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0);
+            } catch (_) {}
+          };
+          img.src = snap.src;
+        }
+      } catch (_) {}
       
       // Re-setup interactions
       document.querySelectorAll('.canvas-element').forEach(setupElementInteraction);
@@ -2201,7 +2311,18 @@ function restoreVersion(versionId) {
  * Share and export functions
  */
 function shareBoard() {
-  const shareUrl = `${window.location.origin}${window.location.pathname}?board=${generateId()}`;
+  let shareUrl = `${window.location.origin}${window.location.pathname}`;
+  try {
+    const url = new URL(window.location.href);
+    const currentBoardId = window.CD && window.CD.boardId ? String(window.CD.boardId) : null;
+    const sessionCode = url.searchParams.get('session');
+
+    if (currentBoardId && currentBoardId.trim()) {
+      shareUrl = `${window.location.origin}${window.location.pathname}?board=${encodeURIComponent(currentBoardId)}`;
+    } else if (sessionCode && sessionCode.trim()) {
+      shareUrl = `${window.location.origin}${window.location.pathname}?session=${encodeURIComponent(sessionCode.trim())}`;
+    }
+  } catch (_) {}
   
   if (navigator.clipboard) {
     navigator.clipboard.writeText(shareUrl)
@@ -2329,7 +2450,7 @@ function startRealTimeSync() {
       if (wsSubscriptions.cursors) { try { wsSubscriptions.cursors.unsubscribe(); } catch(_){} }
       wsSubscriptions.cursors = CollaboSocket.subscribeCursors(wsBoardId, (evt) => {
         if (!evt || evt.type !== 'cursor') return;
-        // Try to avoid rendering own cursor if identifiable
+        // Ignore own cursor updates (same user across multiple tabs still shown as one distinct user).
         const myName = (window.CD && window.CD.currentUserName) || (getCurrentUser().name);
         if (evt.username && myName && evt.username === myName) return;
         const key = evt.userId || evt.username || 'unknown';
@@ -2539,6 +2660,12 @@ function renderRemoteCursors() {
 // Simple on-page toast/notification helper
 function notify(message, timeoutMs = 2500) {
   try {
+    try {
+      if (window.NotificationService) {
+        window.NotificationService.push(message, 'info');
+      }
+    } catch (_) {}
+
     let host = document.getElementById('toastHost');
     if (!host) {
       host = document.createElement('div');

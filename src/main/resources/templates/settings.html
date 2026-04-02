@@ -769,7 +769,7 @@
         <div class="settings-sidebar">
           <ul class="settings-nav">
             <li><a href="#profile" class="active"><span class="settings-nav-icon">👤</span>Profile</a></li>
-            <li><a href="#account"><span class="settings-nav-icon">🔐</span>Account Security</a></li>
+            <li><a href="#account"><span class="settings-nav-icon">⚙️</span>Advanced Settings</a></li>
             <li><a href="#notifications"><span class="settings-nav-icon">🔔</span>Notifications</a></li>
             <li><a href="#team"><span class="settings-nav-icon">👥</span>Team Management</a></li>
             <li><a href="#collab"><span class="settings-nav-icon">🧑‍🤝‍🧑</span>Collaboration</a></li>
@@ -834,43 +834,51 @@
 
           <!-- Account Security Section -->
           <section class="settings-section" id="account" style="display: none;">
-            <h2 class="section-title">Account Security</h2>
-            <p class="section-description">Manage your account security and login preferences</p>
-            
-            <div class="security-item">
-              <div class="security-info">
-                <h3>Password</h3>
-                <p>Last changed 3 months ago</p>
+            <h2 class="section-title">Advanced Settings</h2>
+            <p class="section-description">Control workspace behavior, locale, and security defaults.</p>
+
+            <form th:action="@{/settings/advanced}" method="post" th:object="${userSettings}">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Theme</label>
+                  <select class="form-input" th:field="*{theme}">
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Language</label>
+                  <select class="form-input" th:field="*{language}">
+                    <option value="en">English</option>
+                    <option value="hi">Hindi</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                  </select>
+                </div>
               </div>
-              <button class="btn btn-secondary btn-small">Change Password</button>
-            </div>
-            
-            <div class="security-item">
-              <div class="security-info">
-                <h3>Two-Factor Authentication</h3>
-                <p>Add an extra layer of security to your account</p>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Timezone</label>
+                  <select class="form-input" th:field="*{timezone}">
+                    <option value="UTC">UTC</option>
+                    <option value="Asia/Kolkata">Asia/Kolkata</option>
+                    <option value="Europe/London">Europe/London</option>
+                    <option value="America/New_York">America/New_York</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Two-Factor Authentication</label>
+                  <label class="toggle-switch" style="margin-top:10px; display:inline-block;">
+                    <input type="checkbox" th:field="*{twoFactorEnabled}">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" th:checked="${false}">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            
-            <div class="security-item">
-              <div class="security-info">
-                <h3>Login Sessions</h3>
-                <p>Manage devices that are signed in to your account</p>
-              </div>
-              <button class="btn btn-secondary btn-small">View Sessions</button>
-            </div>
-            
-            <div class="security-item">
-              <div class="security-info">
-                <h3>Delete Account</h3>
-                <p>Permanently delete your account and all associated data</p>
-              </div>
-              <button class="btn btn-danger btn-small">Delete Account</button>
-            </div>
+
+              <button type="submit" class="btn btn-primary">Save advanced settings</button>
+            </form>
           </section>
 
           <!-- Notifications Section -->
@@ -985,8 +993,8 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Room / Board ID</label>
-                <input type="number" class="form-input" id="collabBoardId" placeholder="Enter Board ID e.g. 1">
+                <label class="form-label">Room Code or Board ID</label>
+                <input type="text" class="form-input" id="collabBoardId" placeholder="Enter session code (e.g. team123) or board id (e.g. 1)">
               </div>
             </div>
 
@@ -995,9 +1003,39 @@
               <button class="btn btn-secondary" type="button" id="btnLeave">Leave Session</button>
             </div>
 
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Invite By Username</label>
+                <input type="text" class="form-input" id="inviteUsername" placeholder="username">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Invite By Email</label>
+                <input type="email" class="form-input" id="inviteEmail" placeholder="email@example.com">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Invite Role</label>
+                <select class="form-input" id="inviteRole">
+                  <option value="viewer">Viewer</option>
+                  <option value="editor">Editor</option>
+                </select>
+              </div>
+              <div class="form-group" style="display:flex; align-items:flex-end;">
+                <button class="btn btn-primary" type="button" id="btnInviteBoard">Send Board Invite</button>
+              </div>
+            </div>
+
             <div class="form-group">
               <label class="form-label">Participants (Active)</label>
               <div id="participants" style="border:1px solid var(--border); border-radius:8px; padding:12px; min-height:44px;">No participants yet.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Live Board Summary</label>
+              <div id="collabSummary" style="border:1px solid var(--border); border-radius:8px; padding:12px; background:#f9fafb; font-size:14px; color:#374151;">
+                Join a board to view live stats.
+              </div>
             </div>
 
             <div class="form-row">
@@ -1068,7 +1106,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
-  <script src="/static/js/collab-socket.js"></script>
+  <script th:src="@{/js/collab-socket.js}"></script>
   <script>
     // Sidebar toggle functionality
     document.addEventListener('DOMContentLoaded', function() {
@@ -1158,18 +1196,83 @@
           }
         };
         input.click();
+      });
 
       // Collaboration via WebSockets (STOMP)
       const boardInput = document.getElementById('collabBoardId');
       const btnJoin = document.getElementById('btnJoin');
       const btnLeave = document.getElementById('btnLeave');
       const btnCursor = document.getElementById('btnCursor');
+      const btnInviteBoard = document.getElementById('btnInviteBoard');
       const participantsDiv = document.getElementById('participants');
       let subs = { participants: null, cursors: null };
+      let activeBoardId = null;
+      let summaryInterval = null;
+
+      function normalizeBoardId(raw) {
+        if (raw == null) return null;
+        const text = String(raw).trim();
+        if (!text) return null;
+        const stripped = text.toLowerCase().startsWith('board-') ? text.slice(6) : text;
+        const n = Number.parseInt(stripped, 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      }
+
+      async function resolveBoardIdFromInput(rawInput) {
+        const normalized = normalizeBoardId(rawInput);
+        if (normalized) return normalized;
+
+        const code = (rawInput || '').trim();
+        if (!code) return null;
+
+        const res = await fetch('/api/boards/session', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code })
+        });
+
+        if (!res.ok) {
+          let msg = 'Failed to resolve session code';
+          try {
+            const err = await res.json();
+            if (err && err.message) msg = err.message;
+          } catch (_) {}
+          throw new Error(msg);
+        }
+
+        const data = await res.json();
+        return normalizeBoardId(data && data.id ? data.id : null);
+      }
 
       btnJoin?.addEventListener('click', async () => {
-        const boardId = boardInput?.value;
-        if (!boardId) { alert('Enter a board ID'); return; }
+        if (!window.CollaboSocket) {
+          alert('Realtime client is not loaded. Please refresh and try again.');
+          return;
+        }
+
+        const raw = boardInput?.value;
+        if (!raw || !raw.trim()) {
+          alert('Enter a session code or board ID');
+          return;
+        }
+
+        let boardId;
+        try {
+          boardId = await resolveBoardIdFromInput(raw);
+        } catch (e) {
+          alert((e && e.message) ? e.message : 'Failed to resolve board/session');
+          return;
+        }
+
+        if (!boardId) {
+          alert('Invalid room code or board ID');
+          return;
+        }
+
+        activeBoardId = boardId;
+        boardInput.value = String(boardId);
+
         CollaboSocket.connect(() => {
           // subscribe to participants and cursors
           subs.participants = CollaboSocket.subscribeParticipants(boardId, (items) => {
@@ -1186,27 +1289,119 @@
           // join and start heartbeat
           CollaboSocket.joinBoard(boardId);
           CollaboSocket.startHeartbeat(boardId, 15000);
+          refreshCollabSummary(boardId);
+          if (summaryInterval) clearInterval(summaryInterval);
+          summaryInterval = setInterval(() => refreshCollabSummary(boardId), 15000);
         });
       });
 
       btnLeave?.addEventListener('click', async () => {
-        const boardId = boardInput?.value;
+        const boardId = activeBoardId || normalizeBoardId(boardInput?.value);
         if (!boardId) { alert('Enter a board ID'); return; }
         CollaboSocket.leaveBoard(boardId);
         if (subs.participants) { subs.participants.unsubscribe(); subs.participants = null; }
         if (subs.cursors) { subs.cursors.unsubscribe(); subs.cursors = null; }
         CollaboSocket.disconnect();
+        activeBoardId = null;
+        if (summaryInterval) { clearInterval(summaryInterval); summaryInterval = null; }
         participantsDiv.textContent = 'No participants yet.';
+        const sum = document.getElementById('collabSummary');
+        if (sum) sum.textContent = 'Join a board to view live stats.';
       });
 
       btnCursor?.addEventListener('click', async () => {
-        const boardId = boardInput?.value;
+        const boardId = activeBoardId || normalizeBoardId(boardInput?.value);
         const x = document.getElementById('cursorX')?.value || 0;
         const y = document.getElementById('cursorY')?.value || 0;
         if (!boardId) { alert('Enter a board ID'); return; }
         CollaboSocket.updateCursor(boardId, x, y);
       });
+
+      btnInviteBoard?.addEventListener('click', async () => {
+        const boardId = activeBoardId || normalizeBoardId(boardInput?.value);
+        if (!boardId) {
+          alert('Join or enter a valid board first');
+          return;
+        }
+        const username = (document.getElementById('inviteUsername')?.value || '').trim();
+        const email = (document.getElementById('inviteEmail')?.value || '').trim();
+        const role = (document.getElementById('inviteRole')?.value || 'viewer').trim();
+        if (!username && !email) {
+          alert('Enter username or email for invite');
+          return;
+        }
+
+        try {
+          const body = new URLSearchParams();
+          body.set('boardId', String(boardId));
+          if (username) body.set('username', username);
+          if (email) body.set('email', email);
+          body.set('role', role);
+          const res = await fetch('/api/shared/invite', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            alert(data.message || 'Failed to send invite');
+            return;
+          }
+          alert('Invite sent successfully');
+          const iu = document.getElementById('inviteUsername');
+          const ie = document.getElementById('inviteEmail');
+          if (iu) iu.value = '';
+          if (ie) ie.value = '';
+        } catch (_) {
+          alert('Failed to send invite');
+        }
       });
+
+      async function refreshCollabSummary(boardId) {
+        const host = document.getElementById('collabSummary');
+        if (!host || !boardId) return;
+        try {
+          const res = await fetch(`/api/settings/collaboration/${boardId}`, { credentials: 'include' });
+          const data = await res.json();
+          if (!res.ok || !data || !data.success) {
+            host.textContent = (data && data.message) ? data.message : 'Unable to fetch live summary.';
+            return;
+          }
+
+          const last = data.lastModified ? formatRelativeTime(data.lastModified) : 'No updates yet';
+          host.innerHTML = `
+            <div><strong>Board:</strong> ${escapeHtml(data.boardName || String(boardId))}</div>
+            <div><strong>Active Connections:</strong> ${Number(data.activeConnections) || 0}</div>
+            <div><strong>Activity (24h):</strong> ${Number(data.activity24h) || 0} events</div>
+            <div><strong>Latest:</strong> ${escapeHtml(data.latestActivity || 'No recent activity')}</div>
+            <div><strong>Last Modified:</strong> ${escapeHtml(last)}</div>
+          `;
+        } catch (_) {
+          host.textContent = 'Unable to fetch live summary.';
+        }
+      }
+
+      function formatRelativeTime(raw) {
+        const ms = Date.parse(raw);
+        if (Number.isNaN(ms)) return String(raw);
+        const sec = Math.max(1, Math.floor((Date.now() - ms) / 1000));
+        if (sec < 60) return sec + 's ago';
+        const min = Math.floor(sec / 60);
+        if (min < 60) return min + 'm ago';
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ago';
+        return Math.floor(hr / 24) + 'd ago';
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
     });
   </script>
 </body>

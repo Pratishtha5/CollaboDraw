@@ -636,6 +636,7 @@
         <div class="welcome-text">
           <h1 th:text="'Welcome back, ' + (${currentUser?.username} ?: 'User') + '!'">Welcome back, User!</h1>
           <p>Ready to create something amazing today?</p>
+          <p id="dashboardLiveClock" style="margin-top:8px; font-size:13px; color:#0e7e58; font-weight:600;">Live status updating...</p>
         </div>
         <a href="#" class="new-board-btn" onclick="showNewBoardDialog(event)">
           <span>+</span>
@@ -673,7 +674,7 @@
           <h2 class="section-title">Recent Boards</h2>
           <a href="/my-content" class="view-all-btn">View All →</a>
         </div>
-        <div class="boards-grid" th:if="${whiteboards != null and not #lists.isEmpty(whiteboards)}">
+        <div class="boards-grid" id="homeBoardsGrid" th:if="${whiteboards != null and not #lists.isEmpty(whiteboards)}">
           <div class="board-card" th:each="board : ${whiteboards}" th:attr="onclick='openBoard(' + ${board?.boardId ?: 'board-1'} + ')'">
             <div class="board-preview">🎯</div>
             <div class="board-info">
@@ -689,7 +690,7 @@
         </div>
         
         <!-- Default Recent Boards (fallback when no data) -->
-        <div class="boards-grid" th:if="${whiteboards == null or #lists.isEmpty(whiteboards)}">
+        <div class="boards-grid" id="homeBoardsFallback" th:if="${whiteboards == null or #lists.isEmpty(whiteboards)}">
           <div class="board-card" onclick="openBoard('board-1')">
             <div class="board-preview">🎯</div>
             <div class="board-info">
@@ -713,35 +714,30 @@
           <h2 class="section-title">Popular Templates</h2>
           <a href="/templates" class="view-all-btn">View All →</a>
         </div>
-        <!-- Show default templates for now -->
-        <div class="templates-grid">
+        <div class="templates-grid" id="homeTemplatesGrid" th:if="${popularTemplates != null and not #lists.isEmpty(popularTemplates)}">
+          <div class="template-card" th:each="t : ${popularTemplates}" th:attr="onclick='useTemplate(\'' + ${t.templateKey} + '\')'">
+            <div class="template-icon" th:text="${t.icon != null ? t.icon : '📄'}">📄</div>
+            <div class="template-title" th:text="${t.name}">Template</div>
+            <div class="template-description" th:text="${t.description}">Template description</div>
+          </div>
+        </div>
+        <div class="templates-grid" id="homeTemplatesFallback" th:if="${popularTemplates == null or #lists.isEmpty(popularTemplates)}">
           <div class="template-card" onclick="useTemplate('mindmap')">
             <div class="template-icon">🧠</div>
             <div class="template-title">Mind Map</div>
             <div class="template-description">Organize ideas and concepts visually</div>
-          </div>
-          <div class="template-card" onclick="useTemplate('kanban')">
-            <div class="template-icon">📋</div>
-            <div class="template-title">Kanban Board</div>
-            <div class="template-description">Track project progress and tasks</div>
-          </div>
-          <div class="template-card" onclick="useTemplate('swot')">
-            <div class="template-icon">🎯</div>
-            <div class="template-title">SWOT Analysis</div>
-            <div class="template-description">Strategic planning framework</div>
-          </div>
-          <div class="template-card" onclick="useTemplate('wireframe')">
-            <div class="template-icon">📐</div>
-            <div class="template-title">Wireframe</div>
-            <div class="template-description">Design app and web layouts</div>
           </div>
         </div>
       </section>
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+  <script th:src="@{/js/collab-socket.js}"></script>
   <script th:src="@{/sidebar-toggle.js}"></script>
-  <script>
+  <script th:inline="javascript">
+    const currentUserId = /*[[${currentUser != null ? currentUser.userId : null}]]*/ null;
     // Notifications dropdown for Home header
     (function(){
       const b = document.getElementById('homeNotifBtn');
@@ -756,11 +752,6 @@
     })();
 
     // Use global openBoard from static/board-operations.js
-
-    function useTemplate(templateId) {
-      // Navigate to whiteboard with template
-      window.location.href = '/mainscreen?template=' + templateId;
-    }
 
     function showHomeImportDialog() {
       // Open a local file picker here; pass file to mainscreen via sessionStorage for immediate import
@@ -927,10 +918,15 @@ async function showNewBoardDialog(e) {
       const data = await response.json();
       
       if (data.success && data.id) {
+        try {
+          localStorage.setItem('collabodraw-boards-updated', JSON.stringify({ action: 'created', boardId: data.id, timestamp: Date.now() }));
+        } catch (_) {}
         // Navigate to the new board with template parameter
-        const url = new URL(`${window.location.origin}/board/${data.id}`);
+        const url = new URL(`${window.location.origin}/mainscreen`);
+        url.searchParams.set('board', String(data.id));
         if (tpl !== 'blank') {
           url.searchParams.set('template', tpl);
+          url.searchParams.set('seedTemplate', '1');
         }
         window.location.href = url.toString();
       } else {
@@ -974,6 +970,126 @@ async function showNewBoardDialog(e) {
         btn.__wired = true;
       }
     })();
+
+    async function refreshDashboardData() {
+      try {
+        const res = await fetch('/api/home/dashboard-data', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data || !data.success) return;
+
+        renderRecentBoards(Array.isArray(data.boards) ? data.boards.slice(0, 8) : []);
+        renderPopularTemplates(Array.isArray(data.templates) ? data.templates.slice(0, 10) : []);
+      } catch (_) {}
+    }
+
+    function renderRecentBoards(boards) {
+      const grid = document.getElementById('homeBoardsGrid') || document.getElementById('homeBoardsFallback');
+      if (!grid) return;
+      if (!Array.isArray(boards) || boards.length === 0) return;
+
+      grid.id = 'homeBoardsGrid';
+      grid.innerHTML = boards.map((board) => {
+        const id = board.boardId || 'board-1';
+        const title = board.boardName || 'Untitled Board';
+        const when = board.lastModified || board.createdAt || null;
+        return `<div class="board-card" onclick="openBoard('${id}')">
+          <div class="board-preview">🎯</div>
+          <div class="board-info">
+            <div class="board-title">${escapeHtml(title)}</div>
+            <div class="board-meta">
+              <span data-time="${when ? escapeHtml(String(when)) : ''}">${escapeHtml(formatTimeLabel(when))}</span>
+              <div class="board-collaborators"><div class="collaborator-avatar"></div></div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderPopularTemplates(templates) {
+      const grid = document.getElementById('homeTemplatesGrid') || document.getElementById('homeTemplatesFallback');
+      if (!grid) return;
+      if (!Array.isArray(templates) || templates.length === 0) return;
+
+      grid.id = 'homeTemplatesGrid';
+      grid.innerHTML = templates.map((tpl) => {
+        const key = tpl.templateKey || 'blank';
+        const icon = tpl.icon || '📄';
+        const name = tpl.name || 'Template';
+        const desc = tpl.description || 'Start quickly with a reusable layout';
+        return `<div class="template-card" onclick="useTemplate('${key}')">
+          <div class="template-icon">${escapeHtml(icon)}</div>
+          <div class="template-title">${escapeHtml(name)}</div>
+          <div class="template-description">${escapeHtml(desc)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function useTemplate(templateId) {
+      if (!templateId) return;
+      window.location.href = '/templates/use/' + encodeURIComponent(templateId);
+    }
+
+    function formatTimeLabel(raw) {
+      if (!raw) return 'Recently created';
+      const parsed = Date.parse(raw);
+      if (Number.isNaN(parsed)) return String(raw);
+      const diffSec = Math.max(1, Math.floor((Date.now() - parsed) / 1000));
+      if (diffSec < 60) return diffSec + 's ago';
+      const diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return diffMin + 'm ago';
+      const diffHr = Math.floor(diffMin / 60);
+      if (diffHr < 24) return diffHr + 'h ago';
+      const diffDay = Math.floor(diffHr / 24);
+      if (diffDay < 7) return diffDay + 'd ago';
+      return new Date(parsed).toLocaleString();
+    }
+
+    function refreshVisibleTimeLabels() {
+      document.querySelectorAll('[data-time]').forEach((el) => {
+        const raw = el.getAttribute('data-time');
+        el.textContent = formatTimeLabel(raw);
+      });
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    window.addEventListener('storage', function(ev) {
+      if (ev && ev.key === 'collabodraw-boards-updated') {
+        refreshDashboardData();
+      }
+    });
+    window.addEventListener('boards:changed', refreshDashboardData);
+    setInterval(refreshVisibleTimeLabels, 30000);
+    setInterval(() => {
+      const clock = document.getElementById('dashboardLiveClock');
+      if (clock) {
+        clock.textContent = 'Live status: ' + new Date().toLocaleString();
+      }
+    }, 1000);
+    const clock = document.getElementById('dashboardLiveClock');
+    if (clock) {
+      clock.textContent = 'Live status: ' + new Date().toLocaleString();
+    }
+
+    try {
+      if (window.CollaboSocket && currentUserId) {
+        CollaboSocket.connect(() => {
+          CollaboSocket.subscribeDashboard(currentUserId, () => {
+            refreshDashboardData();
+          });
+        });
+      }
+    } catch (_) {}
+
+    refreshDashboardData();
   </script>
   <script th:src="@{/board-operations.js}"></script></body>
 </html>

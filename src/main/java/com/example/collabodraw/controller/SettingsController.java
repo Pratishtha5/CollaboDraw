@@ -6,16 +6,23 @@ import com.example.collabodraw.model.entity.Team;
 import com.example.collabodraw.model.entity.TeamMember;
 import com.example.collabodraw.model.entity.User;
 import com.example.collabodraw.model.entity.UserSettings;
+import com.example.collabodraw.repository.ActivityLogRepository;
+import com.example.collabodraw.repository.SessionRepository;
 import com.example.collabodraw.service.NotificationService;
 import com.example.collabodraw.service.SettingsService;
 import com.example.collabodraw.service.TeamService;
 import com.example.collabodraw.service.UserService;
+import com.example.collabodraw.service.WhiteboardService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Controller
 public class SettingsController {
@@ -24,12 +31,20 @@ public class SettingsController {
     private final SettingsService settingsService;
     private final TeamService teamService;
     private final NotificationService notificationService;
+    private final SessionRepository sessionRepository;
+    private final ActivityLogRepository activityLogRepository;
+    private final WhiteboardService whiteboardService;
 
-    public SettingsController(UserService userService, SettingsService settingsService, TeamService teamService, NotificationService notificationService) {
+    public SettingsController(UserService userService, SettingsService settingsService, TeamService teamService,
+                              NotificationService notificationService, SessionRepository sessionRepository,
+                              ActivityLogRepository activityLogRepository, WhiteboardService whiteboardService) {
         this.userService = userService;
         this.settingsService = settingsService;
         this.teamService = teamService;
         this.notificationService = notificationService;
+        this.sessionRepository = sessionRepository;
+        this.activityLogRepository = activityLogRepository;
+        this.whiteboardService = whiteboardService;
     }
 
     @GetMapping("/settings")
@@ -104,9 +119,31 @@ public class SettingsController {
             String username = authentication.getName();
             User user = userService.findByUsername(username);
             if (user != null) {
-                userSettings.setUserId(user.getUserId());
-                settingsService.update(userSettings);
+                UserSettings existing = settingsService.getOrInitSettings(user.getUserId(), user.getUsername());
+                existing.setEmailNotifications(userSettings.isEmailNotifications());
+                existing.setPushNotifications(userSettings.isPushNotifications());
+                existing.setBoardUpdates(userSettings.isBoardUpdates());
+                existing.setMentions(userSettings.isMentions());
+                existing.setMarketingEmails(userSettings.isMarketingEmails());
+                settingsService.update(existing);
                 model.addAttribute("successMessage", "Preferences updated");
+            }
+        }
+        return settings(authentication, model);
+    }
+
+    @PostMapping("/settings/advanced")
+    public String updateAdvanced(@ModelAttribute("userSettings") UserSettings userSettings, Authentication authentication, Model model) {
+        if (authentication != null && authentication.isAuthenticated()) {
+            User user = userService.findByUsername(authentication.getName());
+            if (user != null) {
+                UserSettings existing = settingsService.getOrInitSettings(user.getUserId(), user.getUsername());
+                existing.setTheme(userSettings.getTheme());
+                existing.setLanguage(userSettings.getLanguage());
+                existing.setTimezone(userSettings.getTimezone());
+                existing.setTwoFactorEnabled(userSettings.isTwoFactorEnabled());
+                settingsService.update(existing);
+                model.addAttribute("successMessage", "Advanced settings updated");
             }
         }
         return settings(authentication, model);
@@ -162,5 +199,50 @@ public class SettingsController {
             }
         }
         return settings(authentication, model);
+    }
+
+    @GetMapping("/api/settings/collaboration/{boardId}")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> collaborationSummary(@PathVariable("boardId") Long boardId,
+                                                                    Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("success", false, "message", "Unauthorized"));
+        }
+
+        User user = userService.findByUsername(authentication.getName());
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "User not found"));
+        }
+
+        var board = whiteboardService.getWhiteboardById(boardId);
+        if (board == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("success", false, "message", "Board not found"));
+        }
+
+        String role = whiteboardService.getUserRoleInWhiteboard(user.getUserId(), boardId);
+        boolean isOwner = board.getOwnerId() != null && board.getOwnerId().equals(user.getUserId());
+        if (!isOwner && role == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("success", false, "message", "No access to this board"));
+        }
+
+        int activeConnections = sessionRepository.activeConnectionCount(boardId);
+        var participants = sessionRepository.activeParticipants(boardId);
+        int activity24h = activityLogRepository.countRecentActivityForBoard(boardId, 24);
+        String latest = activityLogRepository.latestActivityTextForBoard(boardId);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("success", true);
+        payload.put("boardId", boardId);
+        payload.put("boardName", board.getBoardName());
+        payload.put("lastModified", board.getLastModified());
+        payload.put("activeConnections", activeConnections);
+        payload.put("participants", participants);
+        payload.put("activity24h", activity24h);
+        payload.put("latestActivity", latest != null ? latest : "No recent activity");
+        return ResponseEntity.ok(payload);
     }
 }

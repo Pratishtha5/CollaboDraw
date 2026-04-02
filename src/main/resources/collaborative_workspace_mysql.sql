@@ -16,6 +16,7 @@ DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS team_members;
 DROP TABLE IF EXISTS teams;
 DROP TABLE IF EXISTS templates;
+DROP TABLE IF EXISTS board_invites;
 DROP TABLE IF EXISTS board_membership;
 DROP TABLE IF EXISTS boards;
 DROP TABLE IF EXISTS users;
@@ -96,6 +97,23 @@ CREATE TABLE board_membership (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
     INDEX idx_role (role),
     INDEX idx_joined (joined_at)
+);
+
+CREATE TABLE board_invites (
+    invite_id INT AUTO_INCREMENT PRIMARY KEY,
+    board_id INT NOT NULL,
+    inviter_id INT NOT NULL,
+    invitee_id INT NOT NULL,
+    role ENUM('editor', 'viewer') DEFAULT 'viewer',
+    status ENUM('pending','accepted','declined','cancelled') DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    responded_at DATETIME NULL,
+    FOREIGN KEY (board_id) REFERENCES boards(board_id) ON DELETE CASCADE,
+    FOREIGN KEY (inviter_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (invitee_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_pending_invite (board_id, invitee_id, status),
+    INDEX idx_invitee_status (invitee_id, status),
+    INDEX idx_inviter (inviter_id)
 );
 
 # Create Elements table

@@ -1,9 +1,10 @@
 package com.example.collabodraw.controller;
 
 import com.example.collabodraw.model.dto.Participant;
+import com.example.collabodraw.model.entity.User;
 import com.example.collabodraw.repository.CursorRepository;
 import com.example.collabodraw.repository.SessionRepository;
-import com.example.collabodraw.repository.UserRepository;
+import com.example.collabodraw.service.UserService;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Header;
@@ -23,18 +24,18 @@ public class CollaborationWsController {
     private final SimpMessagingTemplate messagingTemplate;
     private final SessionRepository sessionRepository;
     private final CursorRepository cursorRepository;
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final com.example.collabodraw.service.RealtimeEventStore eventStore;
 
     public CollaborationWsController(SimpMessagingTemplate messagingTemplate,
                                      SessionRepository sessionRepository,
                                      CursorRepository cursorRepository,
-                                     UserRepository userRepository,
+                                     UserService userService,
                                      com.example.collabodraw.service.RealtimeEventStore eventStore) {
         this.messagingTemplate = messagingTemplate;
         this.sessionRepository = sessionRepository;
         this.cursorRepository = cursorRepository;
-        this.userRepository = userRepository;
+        this.userService = userService;
         this.eventStore = eventStore;
     }
 
@@ -43,9 +44,8 @@ public class CollaborationWsController {
         Long userId = resolveUserId(principal);
         if (userId == null) return;
 
-        if (!sessionRepository.hasActive(boardId, userId)) {
-            sessionRepository.create(boardId, userId);
-        }
+        // Create one session row per websocket join so multi-tab presence is visible.
+        sessionRepository.create(boardId, userId);
         if (cursorRepository.findCursorId(boardId, userId) == null) {
             cursorRepository.insertCursor(boardId, userId, 0, 0);
         }
@@ -68,10 +68,7 @@ public class CollaborationWsController {
     public void heartbeat(@DestinationVariable Long boardId, Principal principal) {
         Long userId = resolveUserId(principal);
         if (userId == null) return;
-        Long sid = sessionRepository.getActiveSessionId(boardId, userId);
-        if (sid != null) {
-            sessionRepository.heartbeat(sid, userId);
-        }
+        sessionRepository.heartbeatByBoard(boardId, userId);
         // Optionally broadcast presence; keep light and only broadcast on join/leave
     }
 
@@ -152,12 +149,13 @@ public class CollaborationWsController {
         Map<String, Object> payload = new HashMap<>();
         payload.put("type", "participants");
         payload.put("items", participants);
+        payload.put("connections", sessionRepository.activeConnectionCount(boardId));
         messagingTemplate.convertAndSend("/topic/board." + boardId + ".participants", payload);
     }
 
     private Long resolveUserId(Principal principal) {
         if (principal == null) return null;
-        var user = userRepository.findByUsername(principal.getName());
+        User user = userService.findByUsername(principal.getName());
         return user != null ? user.getUserId() : null;
     }
 }
