@@ -322,7 +322,7 @@ const UIControls = {
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
       avatar.style.background = user.color;
-      avatar.title = user.name + (index === 0 ? ' (You)' : '');
+      avatar.dataset.tooltip = user.name + (index === 0 ? ' (You)' : '');
       avatar.textContent = user.initials;
       userAvatars.appendChild(avatar);
     });

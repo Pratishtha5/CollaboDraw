@@ -76,14 +76,18 @@ public class SecurityConfig {
                 .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll() // OAuth2 endpoints (safe even if disabled)
                 
                 // ✅ API ENDPOINTS
-                .requestMatchers("/api/drawings/**").permitAll()
-                .requestMatchers("/api/boards/create").authenticated()
-                .requestMatchers("/api/boards/**").authenticated()
+                .requestMatchers("/api/drawings/**", "/api/boards/**").permitAll()
                 
                 // ✅ PROTECTED ENDPOINTS
                 .requestMatchers("/home", "/board/**", "/my-content", "/settings", "/templates", "/shared").authenticated()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().authenticated()
+            )
+            .exceptionHandling(e -> e
+                .defaultAuthenticationEntryPointFor(
+                    new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED),
+                    new org.springframework.security.web.util.matcher.AntPathRequestMatcher("/api/**")
+                )
             )
 
             // ✅ FORM LOGIN

@@ -94,8 +94,28 @@ function setupEventListeners() {
   });
   
   AppState.mainCanvas.addEventListener('contextmenu', showContextMenu);
+  let lastCursorSend = 0;
   AppState.mainCanvas.addEventListener('mousedown', handleCanvasMouseDown);
-  AppState.mainCanvas.addEventListener('mousemove', handleCanvasMouseMove);
+  AppState.mainCanvas.addEventListener('mousemove', (e) => {
+    handleCanvasMouseMove(e);
+    
+    // Broadcast cursor to real-time sync with 33ms throttle (~30 FPS)
+    const now = Date.now();
+    if (now - lastCursorSend > 33 && window.CD && window.CD.boardId && window.CollaboSocket) {
+      const rect = AppState.mainCanvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / AppState.zoomLevel - AppState.panX;
+      const y = (e.clientY - rect.top) / AppState.zoomLevel - AppState.panY;
+      
+      try {
+        const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
+        CollaboSocket.updateCursor(boardNumeric, x, y);
+        lastCursorSend = now;
+        console.log(`Cursor sent: (${Math.round(x)}, ${Math.round(y)})`);
+      } catch (err) {
+        // ignore
+      }
+    }
+  });
   AppState.mainCanvas.addEventListener('mouseup', handleCanvasMouseUp);
   
   // Keyboard
@@ -864,37 +884,60 @@ function goHome() { /* Already defined */ }
 function showHelp() { UIControls.showHelp(); }
 
 /**
- * Initialize tooltips on all [data-tooltip] elements
+ * Initialize tooltips using a single global tooltip element
  */
 function initializeTooltips() {
   try {
-    document.querySelectorAll('[data-tooltip]').forEach(el => {
-      el.addEventListener('mouseenter', function(e) {
-        if (!this.tooltipElement) {
-          const tooltip = document.createElement('div');
-          tooltip.className = 'tooltip';
-          tooltip.innerHTML = this.getAttribute('data-tooltip');
-          document.body.appendChild(tooltip);
-          
-          this.tooltipElement = tooltip;
-        }
-        
-        const tooltip = this.tooltipElement;
-        const rect = this.getBoundingClientRect();
-        tooltip.style.left = (rect.left + rect.width / 2) + 'px';
-        tooltip.style.top = (rect.top - 10) + 'px';
-        tooltip.classList.add('show');
-        
-        setTimeout(() => tooltip.classList.add('show'), 50);
-      });
-      
-      el.addEventListener('mouseleave', function(e) {
-        if (this.tooltipElement) {
-          this.tooltipElement.classList.remove('show');
-        }
-      });
+    let globalTooltip = document.getElementById('globalTooltip');
+    if (!globalTooltip) {
+      globalTooltip = document.createElement('div');
+      globalTooltip.id = 'globalTooltip';
+      globalTooltip.className = 'tooltip';
+      document.body.appendChild(globalTooltip);
+    }
+    
+    document.addEventListener('mouseover', (e) => {
+      const el = e.target.closest('[data-tooltip]');
+      if (!el) return;
+      const text = el.getAttribute('data-tooltip');
+      if (text) {
+        globalTooltip.innerHTML = text;
+        const rect = el.getBoundingClientRect();
+        globalTooltip.style.left = (rect.left + rect.width / 2) + 'px';
+        globalTooltip.style.top = (rect.top - 10) + 'px';
+        globalTooltip.classList.add('show');
+      }
     });
-    console.log('✅ Tooltips initialized');
+
+    document.addEventListener('mousemove', (e) => {
+      if (globalTooltip.classList.contains('show')) {
+        const el = e.target.closest('[data-tooltip]');
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          globalTooltip.style.left = (rect.left + rect.width / 2) + 'px';
+          globalTooltip.style.top = (rect.top - 10) + 'px';
+        }
+      }
+    });
+
+    document.addEventListener('mouseout', (e) => {
+      const el = e.target.closest('[data-tooltip]');
+      if (!el) {
+        globalTooltip.classList.remove('show');
+      } else {
+        // Hide if we leave the element entirely
+         const related = e.relatedTarget;
+         if (!el.contains(related)) {
+             globalTooltip.classList.remove('show');
+         }
+      }
+    });
+
+    document.addEventListener('mousedown', () => {
+      globalTooltip.classList.remove('show');
+    });
+
+    console.log('✅ Global tooltips initialized');
   } catch (e) {
     console.warn('⚠️ Tooltip initialization error:', e);
   }

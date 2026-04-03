@@ -1,5 +1,5 @@
 # CollaboDraw
-
+![alt text](image.png)
 CollaboDraw is a real-time collaborative whiteboard built with Spring Boot, STOMP over WebSockets, Thymeleaf, and MySQL.
 Multiple users can draw on the same board, see presence and cursor updates, and collaborate live.
 
@@ -10,6 +10,27 @@ Multiple users can draw on the same board, see presence and cursor updates, and 
 - Form login plus Google OAuth2 login.
 - Clean MVC + service + repository backend structure.
 - H2 dev profile for fast local testing without external DB.
+
+## Application Screens
+### Home
+- Access boards
+- Navigate to shared content
+- Manage personal workspace
+
+### Whiteboard
+
+- Draw shapes, lines, freehand sketches
+- See other users’ cursors in real time
+- Sync updates instantly across clients
+
+ ### Live Collaboration 
+- Track active users on board
+- Real-time cursor movement
+- Presence indicators
+
+### Authentication (Login / OAuth)
+- Secure login with Spring Security
+- Google OAuth2 integration
 
 ## Tech Stack
 
