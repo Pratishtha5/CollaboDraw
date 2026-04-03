@@ -338,26 +338,33 @@
           <button class="tab-btn" id="tab-signup" role="tab" aria-selected="false" aria-controls="signup-form" tabindex="-1">Sign Up</button>
         </div>
         <!-- Success/Error Messages -->
+        <div th:if="${!databaseAvailable}" class="alert alert-warning" style="background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #ffeeba;">
+          <span th:text="${databaseMessage}">Aiven/MySQL is currently offline.</span>
+          <div th:if="${databaseReason}" style="margin-top:6px;font-size:0.95rem;">
+            <strong>Reason:</strong> <span th:text="${databaseReason}">Unknown</span>
+          </div>
+        </div>
         <div th:if="${message}" class="alert alert-success" style="background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #c3e6cb;">
           <span th:text="${message}"></span>
         </div>
         <div th:if="${error}" class="alert alert-danger" style="background: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #f5c6cb;">
           <span th:text="${error}"></span>
         </div>
+        <div th:style="${databaseAvailable} ? '' : 'pointer-events:none;opacity:0.55;'">
         <!-- Login form -->
         <form id="login-form" method="post" action="/login" autocomplete="on" role="tabpanel" aria-labelledby="tab-login">
           <div class="input-field">
             <label for="username">Username</label>
-            <input type="text" id="username" name="username" placeholder="Enter your username" autocomplete="username" required />
+            <input type="text" id="username" name="username" placeholder="Enter your username" autocomplete="username" required th:disabled="${!databaseAvailable}" />
           </div>
           <div class="input-field">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" placeholder="Password" autocomplete="current-password" required />
+            <input type="password" id="password" name="password" placeholder="Password" autocomplete="current-password" required th:disabled="${!databaseAvailable}" />
           </div>
           <div class="forgot-link" tabindex="0" role="link">Forgot Password?</div>
-          <button type="submit" class="form-btn">Sign in</button>
+          <button type="submit" class="form-btn" th:disabled="${!databaseAvailable}">Sign in</button>
           <div class="social-row">
-            <a href="/oauth2/authorization/google" class="social-btn" aria-label="Google login">
+            <a href="/oauth2/authorization/google" class="social-btn" aria-label="Google login" th:classappend="${!databaseAvailable} ? 'disabled-login' : ''" th:attr="aria-disabled=${!databaseAvailable}">
               <!-- Google SVG -->
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="20" height="20" focusable="false" aria-hidden="true">
                 <path fill="#fbc02d"
@@ -387,20 +394,21 @@
           role="tabpanel" aria-labelledby="tab-signup">
           <div class="input-field">
             <label for="signup-name">Username</label>
-            <input type="text" id="signup-name" name="username" placeholder="Your username" autocomplete="username" required />
+            <input type="text" id="signup-name" name="username" placeholder="Your username" autocomplete="username" required th:disabled="${!databaseAvailable}" />
           </div>
           <div class="input-field">
             <label for="signup-email">Email</label>
-            <input type="email" id="signup-email" name="email" placeholder="username@gmail.com" autocomplete="email" required />
+            <input type="email" id="signup-email" name="email" placeholder="username@gmail.com" autocomplete="email" required th:disabled="${!databaseAvailable}" />
           </div>
           <div class="input-field">
             <label for="signup-password">Create Password</label>
             <input type="password" id="signup-password" name="password" placeholder="Choose a password" autocomplete="new-password"
-              required />
+              required th:disabled="${!databaseAvailable}" />
           </div>
-          <button type="submit" class="form-btn">Register</button>
+          <button type="submit" class="form-btn" th:disabled="${!databaseAvailable}">Register</button>
           <div class="alt-link">Already have an account? <a id="show-login">Login</a></div>
         </form>
+        </div>
       </div>
     </div>
   </div>

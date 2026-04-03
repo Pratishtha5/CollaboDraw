@@ -137,9 +137,15 @@ public class CollaborationWsController {
         envelope.put("payload", msg != null ? msg.payload : null);
         Map<String, Object> meta = new HashMap<>();
         meta.put("kind", msg != null ? msg.kind : null);
+        meta.put("by", principal != null ? principal.getName() : "");
+        meta.put("userId", resolveUserId(principal));
+        boolean isPartialStroke = msg != null && msg.payload != null && Boolean.TRUE.equals(msg.payload.get("partial"));
+        meta.put("partial", isPartialStroke);
         envelope.put("meta", meta);
         // Store for late joiners
-        eventStore.addEvent(boardId, envelope);
+        if (!isPartialStroke) {
+            eventStore.addEvent(boardId, envelope);
+        }
         // Broadcast to subscribers
         messagingTemplate.convertAndSend("/topic/board." + boardId + ".elements", envelope);
     }

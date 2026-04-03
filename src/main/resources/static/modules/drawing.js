@@ -34,6 +34,7 @@ const DrawingTools = {
 
     this.renderQueue = [];
     this.lastBroadcast = 0;
+    this.lastBroadcastPointCount = 0;
     window._lastRenderedPoint = [x, y];
     if (!this.rendering) {
       this.rendering = true;
@@ -96,10 +97,14 @@ const DrawingTools = {
       try {
         if (window.CD && window.CD.boardId && typeof CollaboSocket !== 'undefined') {
           const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
+          const points = window._currentStroke.points || [];
+          const startIndex = this.lastBroadcastPointCount > 0 ? Math.max(0, this.lastBroadcastPointCount - 1) : Math.max(0, points.length - 2);
+          const partialPoints = points.slice(startIndex);
+          if (!partialPoints.length) return;
           CollaboSocket.publishElement(boardNumeric, {
             kind: 'stroke',
             payload: {
-              points: window._currentStroke.points.slice(-20),
+              points: partialPoints,
               color: window._currentStroke.color,
               width: window._currentStroke.width,
               alpha: window._currentStroke.alpha,
@@ -108,6 +113,7 @@ const DrawingTools = {
               strokeId: window._currentStroke.id || (window._currentStroke.id = AppState.generateId())
             }
           });
+          this.lastBroadcastPointCount = points.length;
         }
       } catch(err){ /* silent */ }
     }
@@ -151,6 +157,7 @@ const DrawingTools = {
             width: window._currentStroke.width,
             alpha: window._currentStroke.alpha,
             tool: window._currentStroke.tool,
+            partial: false,
             strokeId: window._currentStroke.id || (window._currentStroke.id = AppState.generateId())
           }
         });
@@ -215,6 +222,9 @@ const DrawingTools = {
     const sid = payload.strokeId || 'unknown';
     window._remoteStrokePaths = window._remoteStrokePaths || {};
     const pts = payload.points;
+    const isPartial = !!payload.partial;
+
+    const samePoint = (a, b) => Array.isArray(a) && Array.isArray(b) && a[0] === b[0] && a[1] === b[1];
     
     AppState.ctx.save();
     AppState.ctx.lineCap = 'round';
@@ -224,13 +234,24 @@ const DrawingTools = {
     AppState.ctx.beginPath();
     
     const existing = window._remoteStrokePaths[sid];
+    let startIndex = 0;
     if (existing && existing.lastPoint) {
-      AppState.ctx.moveTo(existing.lastPoint[0], existing.lastPoint[1]);
+      const matchedIndex = pts.findIndex(pt => samePoint(pt, existing.lastPoint));
+      if (matchedIndex >= 0) {
+        AppState.ctx.moveTo(existing.lastPoint[0], existing.lastPoint[1]);
+        startIndex = matchedIndex + 1;
+      } else if (isPartial) {
+        AppState.ctx.moveTo(existing.lastPoint[0], existing.lastPoint[1]);
+      } else if (pts.length) {
+        AppState.ctx.moveTo(pts[0][0], pts[0][1]);
+        startIndex = 1;
+      }
     } else if (pts.length) {
       AppState.ctx.moveTo(pts[0][0], pts[0][1]);
+      startIndex = 1;
     }
     
-    for (let i = 0; i < pts.length; i++) {
+    for (let i = startIndex; i < pts.length; i++) {
       const [px, py] = pts[i];
       AppState.ctx.lineTo(px, py);
     }
@@ -240,7 +261,7 @@ const DrawingTools = {
     AppState.ctx.restore();
     
     if (pts.length) {
-      window._remoteStrokePaths[sid] = { lastPoint: pts[pts.length - 1] };
+      window._remoteStrokePaths[sid] = { lastPoint: pts[pts.length - 1], partial: isPartial };
     }
   }
 };

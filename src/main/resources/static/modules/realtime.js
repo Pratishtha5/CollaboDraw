@@ -143,6 +143,12 @@ const RealTime = {
     try {
       if (!meta || !meta.kind) return;
       const kind = meta.kind;
+      const currentUserName = (window.CD && window.CD.currentUserName) || AppState.getCurrentUser().name;
+
+      // Ignore live echoes of our own stroke broadcasts; replay keeps them visible.
+      if (!meta.replay && meta.by && currentUserName && meta.by === currentUserName && kind === 'stroke') {
+        return;
+      }
       
       if (kind === 'stroke' && payload && Array.isArray(payload.points)) {
         DrawingTools.renderRemoteStroke(payload);
@@ -231,7 +237,7 @@ const RealTime = {
           const kind = ev.kind || ev.type || ev.eventType;
           const payload = ev.payload || ev.data || ev.body;
           if (!kind) return;
-          this.handleElementEvent(payload, { kind });
+          this.handleElementEvent(payload, { kind, by: ev.by || ev.meta?.by, userId: ev.meta?.userId, replay: true });
         } catch(re){ console.warn('Replay event failed', re); }
       });
     } catch (e) {

@@ -2,6 +2,8 @@ package com.example.collabodraw.security;
 
 import com.example.collabodraw.model.entity.User;
 import com.example.collabodraw.repository.UserRepository;
+import org.springframework.dao.DataAccessException;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -18,7 +20,12 @@ public class MyUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username);
+        User user;
+        try {
+            user = userRepository.findByUsername(username);
+        } catch (DataAccessException ex) {
+            throw new AuthenticationServiceException("Database unavailable", ex);
+        }
         if (user == null) {
             System.out.println("DEBUG: No user found with username = " + username);
             throw new UsernameNotFoundException("User not found: " + username);

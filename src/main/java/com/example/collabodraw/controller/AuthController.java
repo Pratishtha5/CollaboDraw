@@ -2,6 +2,7 @@ package com.example.collabodraw.controller;
 
 import com.example.collabodraw.exception.UserAlreadyExistsException;
 import com.example.collabodraw.model.dto.UserRegistrationDto;
+import com.example.collabodraw.service.DatabaseHealthService;
 import com.example.collabodraw.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
@@ -17,15 +18,30 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class AuthController {
 
     private final UserService userService;
+    private final DatabaseHealthService databaseHealthService;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, DatabaseHealthService databaseHealthService) {
         this.userService = userService;
+        this.databaseHealthService = databaseHealthService;
     }
 
     @GetMapping("/auth")
     public String loginPage(@RequestParam(value = "error", required = false) String error, Model model) {
+        boolean databaseAvailable = databaseHealthService.refresh();
+        model.addAttribute("databaseAvailable", databaseAvailable);
+        model.addAttribute("databaseMessage", databaseHealthService.getLastStatusMessage());
+        model.addAttribute("databaseReason", databaseHealthService.getLastFailureReason());
+
+        if (!databaseAvailable && error == null) {
+            model.addAttribute("error", "Aiven/MySQL is currently unavailable. " + databaseHealthService.getLastFailureReason());
+        }
+
         if (error != null) {
-            model.addAttribute("error", "Invalid username or password. Please try again.");
+            if ("dbUnavailable".equals(error)) {
+                model.addAttribute("error", "Aiven/MySQL is currently unavailable. " + databaseHealthService.getLastFailureReason());
+            } else {
+                model.addAttribute("error", "Invalid username or password. Please try again.");
+            }
         }
         return "auth";
     }

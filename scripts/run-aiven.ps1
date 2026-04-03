@@ -44,24 +44,99 @@ try {
     }
   }
 
+  function Set-EnvValue {
+    param(
+      [Parameter(Mandatory = $true)]
+      [string]$Name,
+      [Parameter(Mandatory = $true)]
+      [string]$Value
+    )
+
+    [Environment]::SetEnvironmentVariable($Name, $Value, 'Process')
+  }
+
+  function Clear-EnvValue {
+    param(
+      [Parameter(Mandatory = $true)]
+      [string]$Name
+    )
+
+    [Environment]::SetEnvironmentVariable($Name, $null, 'Process')
+  }
+
+  function Get-FirstValue {
+    param(
+      [Parameter(Mandatory = $true)]
+      [string[]]$Names,
+      [string]$Default = ''
+    )
+
+    foreach ($name in $Names) {
+      $value = [Environment]::GetEnvironmentVariable($name)
+      if (-not [string]::IsNullOrWhiteSpace($value)) {
+        return $value.Trim()
+      }
+    }
+
+    return $Default
+  }
+
+  function Stop-PortListener {
+    param(
+      [Parameter(Mandatory = $true)]
+      [int]$ListenPort
+    )
+
+    $connections = Get-NetTCPConnection -LocalPort $ListenPort -State Listen -ErrorAction SilentlyContinue
+    if (-not $connections) {
+      return
+    }
+
+    $processIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($processId in $processIds) {
+      $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+      if ($null -eq $process) {
+        continue
+      }
+
+      if ($process.ProcessName -match 'java|javaw|mvn|mvnw') {
+        Write-Host "Stopping stale process '$($process.ProcessName)' (PID $processId) on port $ListenPort..." -ForegroundColor Yellow
+        Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+        continue
+      }
+
+      Write-Host "Port $ListenPort is already in use by '$($process.ProcessName)' (PID $processId). Stop it before running the app." -ForegroundColor Red
+      exit 5
+    }
+  }
+
   Import-DotEnv
 
-  # Map AIVEN_* to DB_* if DB_* not set (Option A: build URL from parts in application.properties)
-  if (-not $env:DB_HOST) {
-    $tmp = [Environment]::GetEnvironmentVariable('AIVEN_HOST')
-    if (-not [string]::IsNullOrWhiteSpace($tmp)) { $env:DB_HOST = $tmp }
+  # Prefer the Aiven values from .env and mirror them into the DB_* names used by the app.
+  $aivenHost = Get-FirstValue -Names @('AIVEN_HOST', 'DB_HOST')
+  $aivenPort = Get-FirstValue -Names @('AIVEN_PORT', 'DB_PORT') -Default '17118'
+  $aivenDb = Get-FirstValue -Names @('AIVEN_DB', 'DB_NAME') -Default 'collaborative_workspace_db'
+
+  if ([string]::IsNullOrWhiteSpace($aivenHost)) {
+    Write-Host 'Missing Aiven host in .env (set AIVEN_HOST or DB_HOST).' -ForegroundColor Red
+    exit 2
   }
-  if (-not $env:DB_PORT) {
-    $tmp = [Environment]::GetEnvironmentVariable('AIVEN_PORT')
-    if (-not [string]::IsNullOrWhiteSpace($tmp)) { $env:DB_PORT = $tmp } else { $env:DB_PORT = '17118' }
-  }
-  if (-not $env:DB_NAME) {
-    $tmp = [Environment]::GetEnvironmentVariable('AIVEN_DB')
-    if (-not [string]::IsNullOrWhiteSpace($tmp)) { $env:DB_NAME = $tmp } else { $env:DB_NAME = 'defaultdb' }
+
+  Set-EnvValue -Name 'AIVEN_HOST' -Value $aivenHost
+  Set-EnvValue -Name 'AIVEN_PORT' -Value $aivenPort
+  Set-EnvValue -Name 'AIVEN_DB' -Value $aivenDb
+  Set-EnvValue -Name 'DB_HOST' -Value $aivenHost
+  Set-EnvValue -Name 'DB_PORT' -Value $aivenPort
+  Set-EnvValue -Name 'DB_NAME' -Value $aivenDb
+
+  # Remove stale Spring datasource overrides so the profile properties win.
+  foreach ($override in 'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME', 'SPRING_DATASOURCE_PASSWORD', 'SPRING_DATASOURCE_DRIVER_CLASS_NAME') {
+    Clear-EnvValue -Name $override
   }
 
   foreach ($req in 'DB_USER','DB_PASS') {
-    $val = [Environment]::GetEnvironmentVariable($req)
+    $val = Get-FirstValue -Names @($req)
     if ([string]::IsNullOrWhiteSpace($val)) {
       Write-Host "Missing $req env var (set it in .env)" -ForegroundColor Red
       exit 2
@@ -70,7 +145,7 @@ try {
 
   # Validate Google OAuth vars (fail fast if missing to avoid silent bypass or misconfig)
   foreach ($g in 'GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET') {
-    $gval = [Environment]::GetEnvironmentVariable($g)
+    $gval = Get-FirstValue -Names @($g)
     if ([string]::IsNullOrWhiteSpace($gval)) {
       Write-Host "Missing $g env var for Google OAuth (set it in .env)" -ForegroundColor Red
       exit 3
@@ -81,7 +156,7 @@ try {
     try {
       $dbHost = $env:DB_HOST
       $dbPort = if ($env:DB_PORT) { $env:DB_PORT } else { '17118' }
-      $dbName = if ($env:DB_NAME) { $env:DB_NAME } else { 'defaultdb' }
+      $dbName = if ($env:DB_NAME) { $env:DB_NAME } else { 'collaborative_workspace_db' }
       Write-Host "Resolved DB: host=$dbHost port=$dbPort db=$dbName" -ForegroundColor DarkGray
       Write-Host "DB_USER=$($env:DB_USER) DB_PASS=********" -ForegroundColor DarkGray
       Write-Host "GOOGLE_CLIENT_ID=$($env:GOOGLE_CLIENT_ID) GOOGLE_CLIENT_SECRET=********" -ForegroundColor DarkGray
@@ -102,10 +177,18 @@ try {
     }
   } catch { $dbReachable = $false }
 
-  if (-not $dbReachable -and $DevFallback) {
-    Write-Host "DB host/port not reachable; enabling dev profile with H2 (OAuth still enabled via env)." -ForegroundColor Yellow
-    [Environment]::SetEnvironmentVariable('SPRING_PROFILES_ACTIVE','dev','Process')
+  if (-not $dbReachable -and -not $DevFallback) {
+    Write-Host "Aiven/MySQL is not reachable on $($env:DB_HOST):$($env:DB_PORT). Fix the network or credentials before running." -ForegroundColor Red
+    exit 4
   }
+
+  [Environment]::SetEnvironmentVariable('SPRING_PROFILES_ACTIVE','aiven','Process')
+
+  if (-not $dbReachable) {
+    Write-Host "Aiven/MySQL is currently unreachable. The app will start in offline mode and show a fallback message on the sign-in page." -ForegroundColor Yellow
+  }
+
+  Stop-PortListener -ListenPort $Port
 
   # Clean + package (skip tests by default)
   if ($RunTests) {

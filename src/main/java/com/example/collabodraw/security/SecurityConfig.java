@@ -4,6 +4,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,6 +17,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.util.Arrays;
+import java.io.IOException;
 
 @Configuration
 @EnableWebSecurity
@@ -89,7 +91,17 @@ public class SecurityConfig {
                 .loginPage("/auth")
                 .loginProcessingUrl("/login")
                 .defaultSuccessUrl("/home", true)
-                .failureUrl("/auth?error=Invalid%20credentials")
+                .failureHandler((request, response, exception) -> {
+                    String target = (exception instanceof AuthenticationServiceException ||
+                            (exception.getCause() != null && exception.getCause() instanceof AuthenticationServiceException))
+                            ? "/auth?error=dbUnavailable"
+                            : "/auth?error=Invalid%20credentials";
+                    try {
+                        response.sendRedirect(target);
+                    } catch (IOException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                })
                 .usernameParameter("username")
                 .passwordParameter("password")
                 .permitAll()
