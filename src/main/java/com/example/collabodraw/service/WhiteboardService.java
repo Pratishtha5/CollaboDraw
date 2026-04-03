@@ -11,6 +11,7 @@ import com.example.collabodraw.repository.ElementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.scheduling.annotation.Async;
 
 import java.util.List;
 
@@ -100,6 +101,7 @@ public class WhiteboardService {
         return elementRepository.findLatestSnapshotData(boardId);
     }
 
+    @Async
     public void saveBoardSnapshot(Long boardId, Long userId, String dataJson) {
         elementRepository.replaceSnapshot(boardId, userId, dataJson);
         boardRepository.updateLastModified(boardId);

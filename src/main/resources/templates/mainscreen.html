@@ -765,7 +765,7 @@
         position: absolute;
         pointer-events: none;
         z-index: 999;
-        transition: all 0.1s;
+        transition: left 0.1s linear, top 0.1s linear;
       }
 
       .cursor-pointer {
@@ -773,18 +773,49 @@
         height: 16px;
         border-radius: 50% 0 50% 50%;
         transform: rotate(-45deg);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
       }
 
       .cursor-label {
         background: #1f2937;
         color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 12px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
         margin-top: 4px;
         transform: rotate(45deg);
         white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
+
+      /* Connection Overlay */
+      #connectionOverlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 10000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      .connection-box {
+        background: white;
+        padding: 24px 32px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        text-align: center;
+      }
+      .connection-spinner {
+        width: 32px; height: 32px;
+        border: 3px solid #e5e7eb;
+        border-top-color: var(--green);
+        border-radius: 50%;
+        margin: 0 auto 16px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { 100% { transform: rotate(360deg); } }
 
       /* Right Panel */
       .right-panel {
@@ -1245,6 +1276,21 @@
         >
           <img th:src="@{/images/apps.png}" />
         </button>
+        <div style="width: 1px; background: var(--border); margin: 0 4px;"></div>
+        <button
+          class="toolbar-btn"
+          data-action="clear-board"
+          data-tooltip="Clear Board canvas"
+        >
+          🗑️
+        </button>
+        <button
+          class="toolbar-btn"
+          data-action="download-image"
+          data-tooltip="Download as PNG"
+        >
+          ⬇️
+        </button>
       </div>
 
       <!-- Timer Widget -->
@@ -1487,6 +1533,15 @@
       <div class="shortcut-item">
         <span>Fit to Screen</span>
         <span class="shortcut-key">0</span>
+      </div>
+    </div>
+
+    <!-- Connection Overlay -->
+    <div id="connectionOverlay">
+      <div class="connection-box">
+        <div class="connection-spinner"></div>
+        <h3 style="margin-bottom:8px;">Reconnecting...</h3>
+        <p style="color:var(--gray);font-size:14px;">Please wait while we restore your connection.</p>
       </div>
     </div>
 

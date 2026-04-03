@@ -36,7 +36,7 @@ public class WhiteboardController {
         } catch (Exception e) {
             System.err.println("Error loading board: " + e.getMessage());
         }
-        return "redirect:/home";
+        return "redirect:/home?error=notfound";
     }
 
     // Redirect legacy /whiteboard route to the single source of truth: /mainscreen

@@ -31,6 +31,44 @@ const DrawingTools = {
     AppState.ctx.lineWidth = AppState.currentTool === 'highlighter' ? 8 : 2;
     AppState.ctx.lineCap = 'round';
     AppState.ctx.globalAlpha = AppState.currentTool === 'highlighter' ? 0.5 : 1;
+
+    this.renderQueue = [];
+    this.lastBroadcast = 0;
+    window._lastRenderedPoint = [x, y];
+    if (!this.rendering) {
+      this.rendering = true;
+      requestAnimationFrame(this.renderLoop.bind(this));
+    }
+  },
+
+  renderLoop() {
+    if (!this.rendering) return;
+    if (this.renderQueue && this.renderQueue.length > 0) {
+      AppState.ctx.beginPath();
+      
+      // Ensure we maintain styling in case of overlapping renders
+      AppState.ctx.strokeStyle = window._currentStroke ? window._currentStroke.color : AppState.currentColor;
+      AppState.ctx.lineWidth = window._currentStroke ? window._currentStroke.width : (AppState.currentTool === 'highlighter' ? 8 : 2);
+      AppState.ctx.lineCap = 'round';
+      AppState.ctx.globalAlpha = window._currentStroke ? window._currentStroke.alpha : (AppState.currentTool === 'highlighter' ? 0.5 : 1);
+
+      if (window._lastRenderedPoint) {
+         AppState.ctx.moveTo(window._lastRenderedPoint[0], window._lastRenderedPoint[1]);
+      }
+      
+      while (this.renderQueue.length > 0) {
+        const pt = this.renderQueue.shift();
+        AppState.ctx.lineTo(pt[0], pt[1]);
+        window._lastRenderedPoint = pt;
+      }
+      AppState.ctx.stroke();
+    }
+    if (AppState.isDrawing) {
+      requestAnimationFrame(this.renderLoop.bind(this));
+    } else {
+      this.rendering = false;
+      window._lastRenderedPoint = null;
+    }
   },
 
   /**
@@ -42,17 +80,26 @@ const DrawingTools = {
     const rect = AppState.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    if (window._currentStroke) window._currentStroke.points.push([x, y]);
     
-    // Progressive broadcast every 10 points
-    if (window._currentStroke && window._currentStroke.points.length % 10 === 0) {
+    if (window._currentStroke) {
+        window._currentStroke.points.push([x, y]);
+        if (!this.renderQueue) this.renderQueue = [];
+        this.renderQueue.push([x, y]);
+    }
+    
+    // Progressive broadcast every 50ms (time-based throttling)
+    const now = Date.now();
+    if (!this.lastBroadcast) this.lastBroadcast = parseInt(now);
+    
+    if (now - this.lastBroadcast > 50 && window._currentStroke) {
+      this.lastBroadcast = now;
       try {
         if (window.CD && window.CD.boardId && typeof CollaboSocket !== 'undefined') {
           const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
           CollaboSocket.publishElement(boardNumeric, {
             kind: 'stroke',
             payload: {
-              points: window._currentStroke.points.slice(-10),
+              points: window._currentStroke.points.slice(-20),
               color: window._currentStroke.color,
               width: window._currentStroke.width,
               alpha: window._currentStroke.alpha,
@@ -64,11 +111,6 @@ const DrawingTools = {
         }
       } catch(err){ /* silent */ }
     }
-    
-    if (AppState.currentTool === 'pen' || AppState.currentTool === 'highlighter') {
-      AppState.ctx.lineTo(x, y);
-      AppState.ctx.stroke();
-    }
   },
 
   /**
@@ -78,6 +120,8 @@ const DrawingTools = {
     if (!AppState.isDrawing) return;
     
     AppState.isDrawing = false;
+    this.rendering = false; // ensure rAF loop exits cleanly
+    window._lastRenderedPoint = null;
     AppState.ctx.closePath();
     
     const canvasImage = AppState.canvas.toDataURL('image/png');
@@ -95,7 +139,7 @@ const DrawingTools = {
     }
     AppState.boardData.elementsMeta.push(canvasElement);
     
-    // Broadcast stroke
+    // Broadcast final stroke
     try {
       if (window.CD && window.CD.boardId && window._currentStroke && typeof CollaboSocket !== 'undefined') {
         const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
@@ -127,7 +171,6 @@ const DrawingTools = {
     UIControls.selectTool('eraser');
     const mainCanvas = document.getElementById('mainCanvas');
     mainCanvas.classList.add('eraser-mode');
-    console.log('🧹 Eraser activated');
   },
 
   /**
@@ -147,9 +190,7 @@ const DrawingTools = {
       eraserRadius * 2,
       eraserRadius * 2
     );
-    
-    console.log('✅ Erased at:', eraserX, eraserY);
-    
+        
     History.saveState();
     
     try {

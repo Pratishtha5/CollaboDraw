@@ -4,6 +4,13 @@
  */
 
 const ElementManager = {
+  lastZIndex: 10,
+  
+  getNextZIndex() {
+    this.lastZIndex++;
+    return this.lastZIndex;
+  },
+
   /**
    * Setup interaction handlers for canvas elements
    */
@@ -15,6 +22,9 @@ const ElementManager = {
       if (AppState.currentTool !== 'select') return;
       
       e.stopPropagation();
+      // Bring to front on interaction
+      element.style.zIndex = this.getNextZIndex();
+
       if (e.ctrlKey || e.metaKey || e.shiftKey) {
         this.toggleElementSelection(element);
         return;
@@ -58,7 +68,8 @@ const ElementManager = {
             payload: {
               id: element.dataset.id,
               x: parseInt(element.style.left, 10) || 0,
-              y: parseInt(element.style.top, 10) || 0
+              y: parseInt(element.style.top, 10) || 0,
+              zIndex: element.style.zIndex // Ensure zIndex is synced
             }
           });
         }
@@ -79,6 +90,7 @@ const ElementManager = {
     sticky.className = 'canvas-element sticky-note';
     sticky.style.left = x + 'px';
     sticky.style.top = y + 'px';
+    sticky.style.zIndex = this.getNextZIndex();
     sticky.dataset.id = stickyId;
     
     sticky.innerHTML = `
@@ -102,7 +114,7 @@ const ElementManager = {
         const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
         CollaboSocket.publishElement(boardNumeric, {
           kind: 'sticky',
-          payload: { id: stickyId, x, y, title: 'New Note', content: '' }
+          payload: { id: stickyId, x, y, title: 'New Note', content: '', zIndex: sticky.style.zIndex }
         });
       }
     } catch(e){}
@@ -142,6 +154,7 @@ const ElementManager = {
     textEl.className = 'canvas-element';
     textEl.style.left = x + 'px';
     textEl.style.top = y + 'px';
+    textEl.style.zIndex = this.getNextZIndex();
     textEl.dataset.id = textId;
     
     const input = document.createElement('input');
@@ -168,7 +181,7 @@ const ElementManager = {
         const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
         CollaboSocket.publishElement(boardNumeric, {
           kind: 'text',
-          payload: { id: textId, x, y, value: 'Text' }
+          payload: { id: textId, x, y, value: 'Text', zIndex: textEl.style.zIndex }
         });
       }
       

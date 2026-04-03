@@ -50,6 +50,16 @@ const RealTime = {
         AppState.wsSubscriptions.elements = CollaboSocket.subscribeElements(AppState.wsBoardId, (payload, meta) => {
           this.handleElementEvent(payload, meta);
         });
+        // Events
+        window.addEventListener('rt:connected', () => {
+          const overlay = document.getElementById('connectionOverlay');
+          if (overlay) overlay.style.display = 'none';
+        });
+        window.addEventListener('rt:disconnected', () => {
+          const overlay = document.getElementById('connectionOverlay');
+          if (overlay) overlay.style.display = 'flex';
+        });
+
       });
 
       window.addEventListener('beforeunload', () => {
@@ -140,6 +150,10 @@ const RealTime = {
         if (!document.querySelector(`[data-id="${payload.id}"]`)) {
           const el = ElementManager.createStickyNote(payload.x, payload.y);
           if (el) el.dataset.id = payload.id;
+          if (el && payload.zIndex) {
+            el.style.zIndex = payload.zIndex;
+            if (parseInt(payload.zIndex, 10) > ElementManager.lastZIndex) ElementManager.lastZIndex = parseInt(payload.zIndex, 10);
+          }
         }
       } else if (kind === 'sticky-update' && payload) {
         const el = document.querySelector(`[data-id="${payload.id}"]`);
@@ -153,6 +167,10 @@ const RealTime = {
         if (!document.querySelector(`[data-id="${payload.id}"]`)) {
           const el = ElementManager.createTextElement(payload.x, payload.y);
           if (el) el.dataset.id = payload.id;
+          if (el && payload.zIndex) {
+            el.style.zIndex = payload.zIndex;
+            if (parseInt(payload.zIndex, 10) > ElementManager.lastZIndex) ElementManager.lastZIndex = parseInt(payload.zIndex, 10);
+          }
         }
       } else if (kind === 'text-update' && payload) {
         const el = document.querySelector(`[data-id="${payload.id}"]`);
@@ -165,6 +183,10 @@ const RealTime = {
         if (el) {
           el.style.left = (parseInt(payload.x, 10) || 0) + 'px';
           el.style.top = (parseInt(payload.y, 10) || 0) + 'px';
+          if (payload.zIndex) {
+             el.style.zIndex = payload.zIndex;
+             if (parseInt(payload.zIndex, 10) > ElementManager.lastZIndex) ElementManager.lastZIndex = parseInt(payload.zIndex, 10);
+          }
         }
       } else if (kind === 'erase' && payload) {
         const r = payload.radius || 20;

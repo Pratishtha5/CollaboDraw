@@ -3,17 +3,28 @@
   let stompClient = null;
   let heartbeatTimer = null;
 
+  let reconnectAttempts = 0;
+
   function connect(callback){
     const socket = new SockJS('/ws');
     stompClient = Stomp.over(socket);
-    // Optional: disable debug logs
     stompClient.debug = null;
     stompClient.connect({}, function(){
-      try { console.log('[RT] STOMP connected'); } catch {}
+      reconnectAttempts = 0;
+      window.dispatchEvent(new CustomEvent('rt:connected'));
       if (callback) callback();
     }, function(error){
-      try { console.warn('[RT] STOMP connection error:', error); } catch {}
+      window.dispatchEvent(new CustomEvent('rt:disconnected'));
+      if (reconnectAttempts < 10) {
+        const timeout = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000);
+        setTimeout(() => connect(callback), timeout);
+        reconnectAttempts++;
+      }
     });
+  }
+
+  function onConnected(){
+    window.dispatchEvent(new CustomEvent('rt:connected'));
   }
 
   function disconnect(){

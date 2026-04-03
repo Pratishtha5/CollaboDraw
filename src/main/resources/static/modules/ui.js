@@ -124,6 +124,39 @@ const UIControls = {
       case 'fit':
         Canvas.fitToScreen();
         break;
+      case 'clear-board':
+        if (confirm('Are you sure you want to completely clear the board? This cannot be undone.')) {
+          AppState.ctx.clearRect(0, 0, AppState.canvas.width, AppState.canvas.height);
+          AppState.boardData.elementsMeta = [];
+          if (document.getElementById('canvasElements')) {
+            document.getElementById('canvasElements').innerHTML = '';
+          }
+          History.saveState();
+          try { Storage.saveBoardState(); } catch(_){ }
+          try {
+            if (window.CD && window.CD.boardId && typeof CollaboSocket !== 'undefined') {
+              const boardNumeric = String(window.CD.boardId).replace(/^board-/, '');
+              CollaboSocket.publishElement(boardNumeric, {
+                kind: 'erase',
+                payload: { x: AppState.canvas.width/2, y: AppState.canvas.height/2, radius: Math.max(AppState.canvas.width, AppState.canvas.height) * 2 }
+              });
+            }
+          } catch(err){}
+        }
+        break;
+      case 'download-image':
+        try {
+          const dataUrl = AppState.canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = dataUrl;
+          a.download = (AppState.boardData.name ? AppState.boardData.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'collabodraw') + '.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch(err) {
+          console.error('Failed to download image', err);
+        }
+        break;
     }
   },
 
