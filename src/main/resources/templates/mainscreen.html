@@ -1505,10 +1505,24 @@
   <script th:src="@{/js/collab-socket.js}"></script>
   <script th:src="@{/js/notification-service.js}"></script>
 
-  <!-- External JavaScript -->
-  <script th:src="@{/whiteboard.js}"></script>
+  <!-- Modular Whiteboard Components -->
+  <!-- Load state management first -->
+  <script th:src="@{/modules/state.js}"></script>
+  
+  <!-- Load individual modules (can be loaded in any order since they depend on AppState) -->
+  <script th:src="@{/modules/drawing.js}"></script>
+  <script th:src="@{/modules/elements.js}"></script>
+  <script th:src="@{/modules/history.js}"></script>
+  <script th:src="@{/modules/ui.js}"></script>
+  <script th:src="@{/modules/canvas.js}"></script>
+  <script th:src="@{/modules/storage.js}"></script>
+  <script th:src="@{/modules/realtime.js}"></script>
+  
+  <!-- Main orchestrator - loads last -->
+  <script th:src="@{/modules/init.js}"></script>
 
-    <script th:src="@{/board-operations.js}"></script>
+  <!-- External JavaScript -->
+  <script th:src="@{/board-operations.js}"></script>
 
     <!-- Handle URL Parameters -->
     <!-- Handle URL Parameters -->
