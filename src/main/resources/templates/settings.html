@@ -968,23 +968,33 @@
               </form>
               <button class="btn btn-secondary" type="button" onclick="alert('CSV import not implemented yet')">Import from CSV</button>
             </div>
-
-            <div class="team-members" th:if="${teamMembers != null and not #lists.isEmpty(teamMembers)}">
+            <div class="team-members" th:if="${teamMembers != null and !#lists.isEmpty(teamMembers)}">
               <div class="team-member" th:each="member : ${teamMembers}">
+                
                 <div class="member-info">
-                  <div class="member-avatar" th:text="${member.initials}" th:style="'background: ' + ${member.avatarColor}">JS</div>
+                  <div class="member-avatar" 
+                        th:text="${#strings.substring(member.user.username,0,2).toUpperCase()}">
+                  </div>
+            
                   <div class="member-details">
-                    <h4 th:text="${member.fullName}">Jane Smith</h4>
-                    <p th:text="${member.email}">jane.smith@company.com</p>
+                    <h4 th:text="${member.user.username}">Username</h4>
+                    <p th:text="${member.user.email}">Email</p>
                   </div>
                 </div>
-                <div class="member-role" th:text="${member.role}">Admin</div>
+            
+                <div class="member-role" th:text="${member.role}">Role</div>
+            
                 <div class="member-actions">
-                  <form th:action="@{'/settings/team/' + ${member.userId} + '/remove'}" method="post" onsubmit="return confirm('Remove this member?')">
-                    <button class="btn btn-danger btn-small" type="submit">Remove</button>
+                  <form th:action="@{'/settings/team/' + ${member.user.userId} + '/remove'}" method="post">
+                    <button class="btn btn-danger btn-small">Remove</button>
                   </form>
                 </div>
+            
               </div>
+            </div>
+            
+            <div th:if="${teamMembers == null or #lists.isEmpty(teamMembers)}">
+              <p>No team members yet.</p>
             </div>
           </section>
 
@@ -1028,9 +1038,12 @@
               </div>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Participants (Active)</label>
-              <div id="participants" style="border:1px solid var(--border); border-radius:8px; padding:12px; min-height:44px;">No participants yet.</div>
+            <div id="participants">
+              <p>No active participants</p>
+            </div>
+            
+            <div id="collabSummary">
+              <p>Live data will appear after joining a board</p>
             </div>
 
             <div class="form-group">
@@ -1054,52 +1067,34 @@
           </section>
 
           <!-- Default Team Members (fallback when no data) -->
-            <div class="team-members" th:if="${teamMembers == null or #lists.isEmpty(teamMembers)}">
-              <div class="team-member">
-                <div class="member-info">
-                  <div class="member-avatar" style="background: var(--blue);">JS</div>
-                  <div class="member-details">
-                    <h4>Jane Smith</h4>
-                    <p>jane.smith@company.com</p>
-                  </div>
+          <div class="team-members" th:if="${teamMembers != null and !#lists.isEmpty(teamMembers)}">
+            <div class="team-member" th:each="member : ${teamMembers}">
+              
+              <div class="member-info">
+                <div class="member-avatar" 
+                      th:text="${#strings.substring(member.user.username,0,2).toUpperCase()}">
                 </div>
-                <div class="member-role">Admin</div>
-                <div class="member-actions">
-                  <button class="btn btn-secondary btn-small">Edit</button>
-                  <button class="btn btn-danger btn-small">Remove</button>
+          
+                <div class="member-details">
+                  <h4 th:text="${member.user.username}">Username</h4>
+                  <p th:text="${member.user.email}">Email</p>
                 </div>
               </div>
-
-              <div class="team-member">
-                <div class="member-info">
-                  <div class="member-avatar" style="background: var(--purple);">MJ</div>
-                  <div class="member-details">
-                    <h4>Mike Johnson</h4>
-                    <p>mike.johnson@company.com</p>
-                  </div>
-                </div>
-                <div class="member-role">Editor</div>
-                <div class="member-actions">
-                  <button class="btn btn-secondary btn-small">Edit</button>
+          
+              <div class="member-role" th:text="${member.role}">Role</div>
+          
+              <div class="member-actions">
+                <form th:action="@{'/settings/team/' + ${member.user.userId} + '/remove'}" method="post">
                   <button class="btn btn-danger btn-small">Remove</button>
-                </div>
+                </form>
               </div>
-
-              <div class="team-member">
-                <div class="member-info">
-                  <div class="member-avatar" style="background: var(--orange);">SW</div>
-                  <div class="member-details">
-                    <h4>Sarah Wilson</h4>
-                    <p>sarah.wilson@company.com</p>
-                  </div>
-                </div>
-                <div class="member-role">Viewer</div>
-                <div class="member-actions">
-                  <button class="btn btn-secondary btn-small">Edit</button>
-                  <button class="btn btn-danger btn-small">Remove</button>
-                </div>
-              </div>
+          
             </div>
+          </div>
+          
+          <div th:if="${teamMembers == null or #lists.isEmpty(teamMembers)}">
+            <p>No team members yet.</p>
+          </div>
         </div>
       </div>
     </main>

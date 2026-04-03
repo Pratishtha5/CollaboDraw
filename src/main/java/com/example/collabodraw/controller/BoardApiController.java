@@ -363,7 +363,38 @@ public class BoardApiController {
         }
         return currentUser;
     }
-
+    @DeleteMapping("/delete/{boardId}")
+    public ResponseEntity<Map<String, Object>> deleteBoard(
+            @PathVariable String boardId,
+            Authentication authentication) {
+    
+        try {
+            User currentUser = requireCurrentUser(authentication);
+            Long numericBoardId = resolveBoardId(boardId);
+    
+            Board board = whiteboardService.getWhiteboardById(numericBoardId);
+    
+            if (board == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("success", false, "message", "Board not found"));
+            }
+    
+            // Only owner can delete
+            if (!board.getOwnerId().equals(currentUser.getUserId())) {
+                throw new AccessDeniedException("Only owner can delete board");
+            }
+    
+whiteboardService.deleteBoard(numericBoardId, currentUser.getUserId());    
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "message", "Board deleted successfully"
+            ));
+    
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
     private Long resolveBoardId(String boardId) {
         if (boardId == null || boardId.isBlank()) {
             throw new IllegalArgumentException("Board ID is required");
