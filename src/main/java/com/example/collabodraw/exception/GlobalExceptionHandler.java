@@ -10,6 +10,7 @@ import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.sql.SQLTransientConnectionException;
 import java.util.Map;
@@ -52,7 +53,15 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public String handleGenericException(Exception ex, RedirectAttributes redirectAttributes) {
+    public Object handleGenericException(Exception ex, HttpServletRequest request, RedirectAttributes redirectAttributes) {
+        if (request.getRequestURI().startsWith("/api/")) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of(
+                            "success", false,
+                            "error", ex.getClass().getSimpleName(),
+                            "message", ex.getMessage() != null ? ex.getMessage() : "Unknown error"
+                    ));
+        }
         redirectAttributes.addFlashAttribute("error", "An unexpected error occurred: " + ex.getMessage());
         return "redirect:/auth";
     }

@@ -268,7 +268,7 @@ const RealTime = {
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
       avatar.style.background = u.color;
-      avatar.title = u.name + (index === 0 ? ' (You)' : '');
+      avatar.dataset.tooltip = u.name + (index === 0 ? ' (You)' : '');
       avatar.textContent = (u.initials || 'U');
       avatars.appendChild(avatar);
     });
