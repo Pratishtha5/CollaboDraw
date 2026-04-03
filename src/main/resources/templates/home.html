@@ -680,7 +680,10 @@
             <div class="board-info">
               <div class="board-title" th:text="${board?.boardName ?: 'Board Name'}">Board Name</div>
               <div class="board-meta">
-                <span th:text="${board?.lastModified ?: 'Recently created'}">Recently created</span>
+                <span>
+                  Updated:
+                  <span th:text="${#temporals.format(board.lastModified != null ? board.lastModified : board.createdAt, 'dd MMM yyyy, hh:mm a')}"></span>
+                </span>                
                 <div class="board-collaborators">
                   <div class="collaborator-avatar"></div>
                 </div>
@@ -1031,20 +1034,23 @@ async function showNewBoardDialog(e) {
     }
 
     function formatTimeLabel(raw) {
-      if (!raw) return 'Recently created';
-      const parsed = Date.parse(raw);
-      if (Number.isNaN(parsed)) return String(raw);
-      const diffSec = Math.max(1, Math.floor((Date.now() - parsed) / 1000));
-      if (diffSec < 60) return diffSec + 's ago';
-      const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return diffMin + 'm ago';
-      const diffHr = Math.floor(diffMin / 60);
-      if (diffHr < 24) return diffHr + 'h ago';
-      const diffDay = Math.floor(diffHr / 24);
-      if (diffDay < 7) return diffDay + 'd ago';
-      return new Date(parsed).toLocaleString();
-    }
+  if (!raw) return 'Recently created';
 
+  // 🔥 IMPORTANT: treat backend time as UTC
+  const parsed = Date.parse(raw + 'Z');
+
+  if (Number.isNaN(parsed)) return String(raw);
+
+  return new Date(parsed).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',   
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+}
     function refreshVisibleTimeLabels() {
       document.querySelectorAll('[data-time]').forEach((el) => {
         const raw = el.getAttribute('data-time');
