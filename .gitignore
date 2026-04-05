@@ -69,4 +69,3 @@ hs_err_pid*.log
 # Document files
 *.doc
 *.docx
-/screenshots
