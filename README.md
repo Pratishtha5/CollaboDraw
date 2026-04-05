@@ -35,7 +35,7 @@ Multiple users can draw on the same board, see presence and cursor updates, and 
 ### Authentication (Login / OAuth)
 - Secure login with Spring Security
 - Google OAuth2 integration
-![alt text](signup.png) ![alt text](<landing page.png>)![![alt text](image-2.png)](image-1.png)
+![alt text](signup.png) ![alt text](<landing page.png>)![alt text](image-1.png)
 
 ## Tech Stack
 
